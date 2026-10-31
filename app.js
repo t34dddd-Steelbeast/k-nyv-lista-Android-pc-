@@ -280,6 +280,9 @@
   function foldSearchText(value) {
     return String(value || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLocaleLowerCase('hu').replace(/\s+/g, ' ').trim();
   }
+  function normalizeHungarianBookQuery(value) {
+    return String(value || '').replace(/\S+/gu, word => word.replace(/(ás|és)t$/iu, '$1')).replace(/\s+/g, ' ').trim();
+  }
   function isValidIsbn(value) {
     if (/^97[89]\d{10}$/.test(value)) {
       const sum = [...value.slice(0, 12)].reduce((total, digit, index) => total + Number(digit) * (index % 2 ? 3 : 1), 0);
@@ -432,25 +435,30 @@
     $('#catalogSearchMessage').textContent = 'Keresés a könyvkatalógusokban…';
     $('#catalogResults').innerHTML = '';
     state.catalogResults = [];
-    const accentFoldedQuery = foldSearchText(query);
+    const normalizedQuery = normalizeHungarianBookQuery(query);
+    const accentFoldedQuery = foldSearchText(normalizedQuery);
     const searches = [
-      { name: 'Google Books magyar nyelvű', run: () => searchGoogleBooks(query, { hungarianOnly: true }) },
-      { name: 'MEK (OSZK)', run: () => searchMekBooks(query) },
-      { name: 'Open Library magyar nyelvű', run: () => searchOpenLibrary(query, { hungarianOnly: true }) },
+      { name: 'Google Books magyar nyelvű', run: () => searchGoogleBooks(normalizedQuery, { hungarianOnly: true }) },
+      { name: 'MEK (OSZK)', run: () => searchMekBooks(normalizedQuery) },
+      { name: 'Open Library magyar nyelvű', run: () => searchOpenLibrary(normalizedQuery, { hungarianOnly: true }) },
       { name: 'Google Books', run: () => searchGoogleBooks(accentFoldedQuery) },
       { name: 'Open Library', run: () => searchOpenLibrary(accentFoldedQuery) }
     ];
     const results = await Promise.allSettled(searches.map(search => search.run()));
     const successfulGroups = results.filter(result => result.status === 'fulfilled').map(result => result.value);
     const unavailableSources = results.flatMap((result, index) => result.status === 'rejected' ? [searches[index].name] : []);
+    const googleUnavailable = results.some((result, index) => result.status === 'rejected' && searches[index].name.startsWith('Google Books'));
+    const molySearchLink = $('#molySearchLink');
+    molySearchLink.href = `https://moly.hu/kereses?q=${encodeURIComponent(normalizedQuery || query)}`;
+    molySearchLink.hidden = false;
     state.catalogResults = mergeCatalogCandidates(successfulGroups);
     renderCatalogResults();
     if (state.catalogResults.length) {
-      $('#catalogSearchMessage').textContent = `${state.catalogResults.length} találat. Válaszd ki a megfelelő nyelvet, kiadást vagy ISBN-t.${unavailableSources.length ? ` Nem válaszolt: ${[...new Set(unavailableSources)].join(', ')}.` : ''}`;
+      $('#catalogSearchMessage').textContent = `${state.catalogResults.length} találat. Válaszd ki a megfelelő nyelvet, kiadást vagy ISBN-t.${unavailableSources.length ? ` Nem válaszolt: ${[...new Set(unavailableSources)].join(', ')}.` : ''}${googleUnavailable ? ' A Google Books most nem érhető el, ezért magyar címekből kevesebb találat jelenhet meg.' : ''}`;
     } else if (!successfulGroups.length) {
-      $('#catalogSearchMessage').textContent = 'Most nem sikerült elérni a könyvkatalógusokat. Ellenőrizd az internetet, vagy add meg kézzel az adatokat.';
+      $('#catalogSearchMessage').textContent = `Most nem sikerült elérni a könyvkatalógusokat.${googleUnavailable ? ' A Google Books jelenleg nem válaszol.' : ''} Ellenőrizd az internetet, vagy keresd meg a magyar kiadást a Molyon az alábbi hivatkozással.`;
     } else {
-      $('#catalogSearchMessage').textContent = 'Nem találtam egyezést. Próbálj meg másik címet (például az eredeti címet), vagy add meg kézzel az adatokat.';
+      $('#catalogSearchMessage').textContent = `Nem találtam egyezést.${googleUnavailable ? ' A Google Books most nem érhető el, az Open Library pedig nem tartalmazza ezt a magyar kiadást.' : ' Próbáld meg az eredeti címet, vagy add meg kézzel az adatokat.'}`;
     }
     button.disabled = false;
     button.textContent = 'Könyvek keresése';
