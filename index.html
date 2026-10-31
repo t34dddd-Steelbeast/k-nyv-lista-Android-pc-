@@ -98,7 +98,7 @@
             <label class="field"><span>Keresés a könyvadatbázisokban</span><input id="catalogQuery" type="search" maxlength="240" placeholder="Például: Ragyogás Stephen King" autocomplete="off" /></label>
             <button class="button button-primary" id="searchCatalogButton" type="button">Könyvek keresése</button>
           </div>
-          <p class="metadata-note">A Google Books és az Open Library találatai jelennek meg. A nyelvet, kiadót és ISBN-t ellenőrizd a választásnál.</p>
+          <p class="metadata-note">Magyar nyelvű találatokat keresek a Google Booksban és az Open Libraryben, valamint az OSZK Magyar Elektronikus Könyvtárában. A kiadót és az ISBN-t ellenőrizd a választásnál.</p>
           <p class="catalog-search-message" id="catalogSearchMessage" role="status" aria-live="polite"></p>
           <div class="catalog-results" id="catalogResults" aria-live="polite"></div>
         </section>
@@ -112,7 +112,7 @@
           <label class="field"><span>Saját lista</span><select id="bookList"><option value="">Nincs listán</option></select></label>
           <label class="field"><span>ISBN</span><input id="bookIsbn" maxlength="32" inputmode="numeric" placeholder="ISBN-azonosító" /></label>
           <div class="field isbn-actions-field"><span>ISBN-műveletek</span><div class="isbn-actions"><button class="button button-quiet" id="scanIsbnButton" type="button">Vonalkód beolvasása</button><button class="button button-quiet" id="lookupIsbnButton" type="button">Adatok keresése</button></div></div>
-          <p class="metadata-note full">ISBN alapján a Google Books, majd szükség esetén az Open Library keres. A formátumot lent választhatod ki.</p>
+          <p class="metadata-note full">ISBN alapján a Google Books, majd szükség esetén az Open Library keres. A címkereső az OSZK Magyar Elektronikus Könyvtárában is keres. A formátumot lent választhatod ki.</p>
           <p class="metadata-message full" id="metadataMessage" role="status" aria-live="polite"></p>
           <label class="field"><span>Kiadó</span><input id="bookPublisher" maxlength="160" placeholder="Kiadó neve" /></label>
           <label class="field"><span>Kiadás éve</span><input id="bookYear" type="number" inputmode="numeric" min="1000" max="2100" placeholder="Például: 2024" /></label>
@@ -180,3 +180,4 @@
     <input id="importInput" type="file" accept="application/json,.json" hidden />
   </body>
 </html>
+
