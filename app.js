@@ -4,6 +4,7 @@
   const LOCAL_KEY = 'polc.books.v1';
   const LOCAL_LISTS_KEY = 'polc.lists.v1';
   const CONFIG_KEY = 'polc.supabase.config.v2';
+  const GOOGLE_BOOKS_KEY = 'polc.google-books.api-key.v1';
   const DEFAULT_SUPABASE_CONFIG = {
     url: 'https://liriticqwbpqtcpkbimjh.supabase.co',
     key: 'sb_publishable_IO9xI-sJ4L2kbMdsmGc1dA_BThy_e78'
@@ -92,6 +93,7 @@
       $('#projectUrl').value = state.config.url || '';
       $('#publicKey').value = state.config.key || '';
     }
+    $('#googleBooksApiKey').value = localStorage.getItem(GOOGLE_BOOKS_KEY) || '';
   }
 
   function visibleBooks() {
@@ -324,6 +326,9 @@
   async function searchGoogleBooks(query, { hungarianOnly = false } = {}) {
     const params = new URLSearchParams({ q: query, maxResults: '20', printType: 'books' });
     if (hungarianOnly) params.set('langRestrict', 'hu');
+    const apiKey = localStorage.getItem(GOOGLE_BOOKS_KEY)?.trim();
+    if (!apiKey) throw new Error('Google Books API-kulcs nincs beállítva');
+    params.set('key', apiKey);
     const response = await fetch(`https://www.googleapis.com/books/v1/volumes?${params}`);
     if (!response.ok) throw new Error(`Google Books: ${response.status}`);
     const data = await response.json();
@@ -448,17 +453,18 @@
     const successfulGroups = results.filter(result => result.status === 'fulfilled').map(result => result.value);
     const unavailableSources = results.flatMap((result, index) => result.status === 'rejected' ? [searches[index].name] : []);
     const googleUnavailable = results.some((result, index) => result.status === 'rejected' && searches[index].name.startsWith('Google Books'));
+    const googleKeyMissing = !localStorage.getItem(GOOGLE_BOOKS_KEY)?.trim();
     const molySearchLink = $('#molySearchLink');
     molySearchLink.href = `https://moly.hu/kereses?q=${encodeURIComponent(normalizedQuery || query)}`;
     molySearchLink.hidden = false;
     state.catalogResults = mergeCatalogCandidates(successfulGroups);
     renderCatalogResults();
     if (state.catalogResults.length) {
-      $('#catalogSearchMessage').textContent = `${state.catalogResults.length} találat. Válaszd ki a megfelelő nyelvet, kiadást vagy ISBN-t.${unavailableSources.length ? ` Nem válaszolt: ${[...new Set(unavailableSources)].join(', ')}.` : ''}${googleUnavailable ? ' A Google Books most nem érhető el, ezért magyar címekből kevesebb találat jelenhet meg.' : ''}`;
+      $('#catalogSearchMessage').textContent = `${state.catalogResults.length} találat. Válaszd ki a megfelelő nyelvet, kiadást vagy ISBN-t.${googleKeyMissing ? ' A Google Books magyar találataihoz állíts be API-kulcsot a Beállításokban.' : googleUnavailable ? ' A Google Books most nem érhető el, ezért magyar címekből kevesebb találat jelenhet meg.' : ''}`;
     } else if (!successfulGroups.length) {
-      $('#catalogSearchMessage').textContent = `Most nem sikerült elérni a könyvkatalógusokat.${googleUnavailable ? ' A Google Books jelenleg nem válaszol.' : ''} Ellenőrizd az internetet, vagy keresd meg a magyar kiadást a Molyon az alábbi hivatkozással.`;
+      $('#catalogSearchMessage').textContent = `Most nem sikerült elérni a könyvkatalógusokat.${googleKeyMissing ? ' A Google Books API-kulcs még nincs beállítva.' : googleUnavailable ? ' A Google Books jelenleg nem válaszol.' : ''} Ellenőrizd az internetet, vagy keresd meg a magyar kiadást a Molyon az alábbi hivatkozással.`;
     } else {
-      $('#catalogSearchMessage').textContent = `Nem találtam egyezést.${googleUnavailable ? ' A Google Books most nem érhető el, az Open Library pedig nem tartalmazza ezt a magyar kiadást.' : ' Próbáld meg az eredeti címet, vagy add meg kézzel az adatokat.'}`;
+      $('#catalogSearchMessage').textContent = `Nem találtam egyezést.${googleKeyMissing ? ' A Google Books API-kulcs még nincs beállítva, az Open Library pedig nem tartalmazza ezt a magyar kiadást.' : googleUnavailable ? ' A Google Books most nem érhető el, az Open Library pedig nem tartalmazza ezt a magyar kiadást.' : ' Próbáld meg az eredeti címet, vagy add meg kézzel az adatokat.'}`;
     }
     button.disabled = false;
     button.textContent = 'Könyvek keresése';
@@ -974,6 +980,13 @@
       state.client = null;
       localStorage.setItem(CONFIG_KEY, JSON.stringify(state.config));
       toast('A szolgáltatás beállításai elmentve.');
+    });
+    $('#googleBooksKeyForm').addEventListener('submit', event => {
+      event.preventDefault();
+      const key = $('#googleBooksApiKey').value.trim();
+      if (key) localStorage.setItem(GOOGLE_BOOKS_KEY, key);
+      else localStorage.removeItem(GOOGLE_BOOKS_KEY);
+      toast(key ? 'Google Books-kulcs elmentve ezen az eszközön.' : 'Google Books-kulcs törölve.');
     });
     $('#authForm').addEventListener('submit', event => { event.preventDefault(); authenticate(event.submitter?.dataset.auth || 'login'); });
     $('#syncNowButton').addEventListener('click', async () => {
