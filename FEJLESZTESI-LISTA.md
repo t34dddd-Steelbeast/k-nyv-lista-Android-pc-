@@ -1,6 +1,6 @@
 # Polc – fejlesztési lista
 
-## Könyv hozzáadása ISBN alapján
+## Könyv hozzáadása ISBN vagy keresés alapján
 
 - [x] Mobilon a kamera beolvassa a könyv EAN-13 vonalkódját, és kinyeri belőle az ISBN-t.
 - [x] Az ISBN alapján az alkalmazás automatikusan keressen könyvadatokat.
@@ -8,6 +8,9 @@
 - [x] Ha ott nincs találat vagy hiányos az adat, próbálja meg az Open Library API-t.
 - [x] Töltse ki automatikusan, amit megtalál: cím, szerző, kiadó, megjelenési év, oldalszám és borító.
 - [x] Mentés előtt lehessen átnézni és módosítani az adatokat; a hiányzó mezők kézzel is kitölthetők legyenek.
+- [ ] ISBN nélkül, cím vagy szerző alapján is lehessen könyvre keresni.
+- [ ] Több találat esetén lehessen kiválasztani a pontos könyvet vagy kiadást, például fordítás, újrakiadás, e-könyv vagy nyomtatott változat szerint.
+- [ ] A kiválasztott találat adatai kerüljenek a mentés előtti űrlapra, ahol továbbra is ellenőrizhetők és módosíthatók.
 
 Megjegyzés: az adatforrások nem minden könyvhöz adnak vissza minden mezőt, ezért az automatikusan talált adatokat ellenőrizhetővé kell tenni.
 
