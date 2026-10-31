@@ -1,0 +1,136 @@
+<!doctype html>
+<html lang="hu">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#f6f3ed" />
+    <meta name="description" content="Saját könyvtárad könyvekhez, e-könyvekhez és hangoskönyvekhez." />
+    <title>Polc — Saját könyvtár</title>
+    <link rel="manifest" href="manifest.webmanifest" />
+    <link rel="icon" href="icon.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="styles.css" />
+    <script src="app.js" defer></script>
+  </head>
+  <body>
+    <header class="topbar">
+      <a class="brand" href="./" aria-label="Polc kezdőlap">
+        <span class="brand-mark" aria-hidden="true">
+          <svg viewBox="0 0 32 32" fill="none"><path d="M5.5 7.5c4.3-.8 7.8.2 10.5 2.5v15c-2.7-2.3-6.2-3.3-10.5-2.5v-15Z"/><path d="M26.5 7.5c-4.3-.8-7.8.2-10.5 2.5v15c2.7-2.3 6.2-3.3 10.5-2.5v-15Z"/><path d="M16 10v15"/></svg>
+        </span>
+        <span class="brand-copy"><strong>polc</strong><small>a saját könyvtárad</small></span>
+      </a>
+      <div class="top-actions">
+        <span class="connection-badge local" id="connectionBadge"><i></i><span id="connectionText">Helyi tárhely</span></span>
+        <button class="icon-button install-button" id="installButton" type="button" hidden aria-label="Alkalmazás telepítése" title="Telepítés">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v11m0 0 4-4m-4 4-4-4M5 15v4a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-4"/></svg>
+        </button>
+        <button class="icon-button" id="settingsButton" type="button" aria-label="Beállítások" title="Beállítások">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 8.5a3.5 3.5 0 1 0 0 7 3.5 3.5 0 0 0 0-7Z"/><path d="m19.4 13.5 1.1.9-1.1 1.9-1.4-.5a7.9 7.9 0 0 1-1.5.9l-.2 1.5h-2.2l-.4-1.4a7.9 7.9 0 0 1-1.8 0l-.7 1.2-2-.9.3-1.5a7.9 7.9 0 0 1-1.2-1.3l-1.5.2-.7-2.1 1.2-.8a7.9 7.9 0 0 1-.1-1.8l-1.3-.6.7-2.1 1.5.2a7.9 7.9 0 0 1 1.2-1.3l-.3-1.5 2-.9.8 1.2a7.9 7.9 0 0 1 1.8 0l.4-1.4h2.2l.2 1.5a7.9 7.9 0 0 1 1.5.9l1.4-.5 1.1 1.9-1.1.9a7.9 7.9 0 0 1 .1 1.8l1.3.6-.7 2.1-1.5-.2"/></svg>
+        </button>
+      </div>
+    </header>
+
+    <main class="page-shell">
+      <section class="welcome-row" aria-labelledby="pageTitle">
+        <div>
+          <p class="eyebrow">Jó újra a polcodnál</p>
+          <h1 id="pageTitle">Könyvtáram<span class="title-period">.</span></h1>
+          <p class="intro">Minden olvasnivalód egy helyen.</p>
+        </div>
+        <div class="stats" aria-label="Könyvtári összesítő">
+          <div class="stat"><span class="stat-number" id="totalCount">0</span><span>könyv összesen</span></div>
+          <span class="stat-divider" aria-hidden="true"></span>
+          <div class="stat"><span class="stat-number" id="readingCount">0</span><span>most olvasom</span></div>
+          <span class="stat-divider" aria-hidden="true"></span>
+          <div class="stat"><span class="stat-number" id="readCount">0</span><span>már elolvastam</span></div>
+        </div>
+      </section>
+
+      <section class="library" aria-label="Könyvlista">
+        <div class="library-toolbar">
+          <div class="search-wrap">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.8" cy="10.8" r="6.8"/><path d="m16 16 4.2 4.2"/></svg>
+            <input id="searchInput" type="search" placeholder="Keresés cím, szerző vagy ISBN alapján" autocomplete="off" aria-label="Könyvek keresése" />
+            <kbd>/</kbd>
+          </div>
+          <div class="toolbar-actions">
+            <label class="filter-select-wrap">
+              <span class="sr-only">Szűrés formátum szerint</span>
+              <select id="formatFilter" aria-label="Szűrés formátum szerint">
+                <option value="all">Minden formátum</option>
+                <option value="book">Könyv</option>
+                <option value="ebook">E-könyv</option>
+                <option value="audio">Hangoskönyv</option>
+              </select>
+            </label>
+            <button class="button button-primary" id="addBookButton" type="button">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
+              <span>Új könyv</span>
+            </button>
+          </div>
+        </div>
+        <nav class="filter-tabs" aria-label="Szűrés olvasási állapot szerint">
+          <button class="filter-tab active" type="button" data-status="all" aria-pressed="true">Összes <span id="allTabCount">0</span></button>
+          <button class="filter-tab" type="button" data-status="Olvasatlan" aria-pressed="false">Olvasatlan</button>
+          <button class="filter-tab" type="button" data-status="Olvasom" aria-pressed="false">Olvasom</button>
+          <button class="filter-tab" type="button" data-status="Elolvastam" aria-pressed="false">Elolvastam</button>
+          <button class="filter-tab" type="button" data-status="Félbehagytam" aria-pressed="false">Félbehagytam</button>
+        </nav>
+        <div class="books-grid" id="booksGrid" aria-live="polite"></div>
+      </section>
+      <footer class="page-footer"><span>Olvasni jó. Számon tartani még jobb.</span><button id="exportButton" type="button" class="text-button">Könyvtár mentése fájlba</button></footer>
+    </main>
+
+    <dialog class="dialog book-dialog" id="bookDialog" aria-labelledby="bookDialogTitle">
+      <form id="bookForm">
+        <div class="dialog-heading">
+          <div><p class="eyebrow">A könyvtáradhoz</p><h2 id="bookDialogTitle">Új könyv</h2></div>
+          <button class="icon-button close-dialog" type="button" data-close="bookDialog" aria-label="Bezárás"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg></button>
+        </div>
+        <input type="hidden" id="bookId" />
+        <div class="form-grid">
+          <label class="field full"><span>Cím <b>*</b></span><input id="bookTitle" required maxlength="160" placeholder="A könyv címe" /></label>
+          <label class="field full"><span>Szerző <b>*</b></span><input id="bookAuthor" required maxlength="120" placeholder="Szerző neve" /></label>
+          <label class="field"><span>Formátum</span><select id="bookFormat"><option value="book">Könyv</option><option value="ebook">E-könyv</option><option value="audio">Hangoskönyv</option></select></label>
+          <label class="field"><span>Olvasási állapot</span><select id="bookStatus"><option>Olvasatlan</option><option>Olvasom</option><option>Elolvastam</option><option>Félbehagytam</option></select></label>
+          <label class="field"><span>Műfaj</span><input id="bookCategory" maxlength="80" placeholder="Például: regény" /></label>
+          <label class="field"><span>ISBN</span><input id="bookIsbn" maxlength="32" placeholder="ISBN-azonosító" /></label>
+          <label class="field full"><span>Megjegyzés</span><textarea id="bookNotes" rows="3" maxlength="800" placeholder="Gondolatok, idézetek, hol tartasz…"></textarea></label>
+        </div>
+        <div class="dialog-actions"><button class="button button-quiet" type="button" data-close="bookDialog">Mégse</button><button class="button button-primary" type="submit">Mentés a polcra</button></div>
+      </form>
+    </dialog>
+
+    <dialog class="dialog settings-dialog" id="settingsDialog" aria-labelledby="settingsTitle">
+      <div class="dialog-heading">
+        <div><p class="eyebrow">Eszközök között</p><h2 id="settingsTitle">Szinkronizálás</h2></div>
+        <button class="icon-button close-dialog" type="button" data-close="settingsDialog" aria-label="Bezárás"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg></button>
+      </div>
+      <div class="settings-copy" id="syncExplanation"></div>
+      <div id="accountPanel">
+        <form id="configForm" class="config-form">
+          <label class="field"><span>Supabase projekt URL</span><input id="projectUrl" type="url" inputmode="url" placeholder="https://....supabase.co" autocomplete="url" /></label>
+          <label class="field"><span>Supabase anon / publishable kulcs</span><input id="publicKey" type="password" autocomplete="off" placeholder="sb_publishable_… vagy anon kulcs" /></label>
+          <button class="button button-quiet button-wide" type="submit">Beállítások mentése</button>
+        </form>
+        <div class="settings-divider"><span>Fiók</span></div>
+        <form id="authForm" class="config-form">
+          <label class="field"><span>E-mail-cím</span><input id="accountEmail" type="email" autocomplete="email" required placeholder="nev@email.hu" /></label>
+          <label class="field"><span>Jelszó</span><input id="accountPassword" type="password" autocomplete="current-password" required minlength="6" placeholder="Legalább 6 karakter" /></label>
+          <div class="account-actions"><button class="button button-primary" type="submit" data-auth="login">Bejelentkezés</button><button class="button button-quiet" type="submit" data-auth="signup">Új fiók</button></div>
+        </form>
+      </div>
+      <div class="signed-in-panel" id="signedInPanel" hidden>
+        <div class="signed-in-card"><span class="signed-in-icon">✓</span><div><strong>Bejelentkezve</strong><span id="signedInEmail"></span></div></div>
+        <button class="button button-quiet button-wide" id="syncNowButton" type="button">Szinkronizálás most</button>
+        <button class="button button-danger button-wide" id="signOutButton" type="button">Kijelentkezés</button>
+      </div>
+      <p class="settings-footnote">Az eszközök közötti közös könyvtárhoz egyszeri online adatbázis-beállítás kell. A helyi könyveid addig ezen az eszközön maradnak.</p>
+      <a class="setup-link" href="README.md" target="_blank" rel="noopener">Részletes beállítási útmutató</a>
+    </dialog>
+
+    <div class="toast" id="toast" role="status" aria-live="polite"></div>
+    <input id="importInput" type="file" accept="application/json,.json" hidden />
+  </body>
+</html>
+
