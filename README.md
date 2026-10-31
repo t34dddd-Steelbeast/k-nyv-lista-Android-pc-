@@ -24,13 +24,11 @@ Nyisd meg az `index.html` fájlt egy korszerű böngészőben. A helyi könyvlis
 
 Az eszközök közötti megosztáshoz egy Supabase projekt szükséges.
 
-1. Hozz létre egy Supabase projektet. Ezt egyszer kell megtenned; a Polc közvetlenül a te projektedet használja.
-2. A projekt SQL Editorában futtasd le a `supabase/schema.sql` teljes tartalmát. Ha már korábban beállítottad a Polc adatbázisát, ezt az új változatot is futtasd le: hozzáadja a saját listák és a könyv-adatmezők tábláit/oszlopait, a meglévő könyveket nem törli.
-3. Másold ki a projekt URL-jét és a publikus `anon` vagy `publishable` kulcsát a projekt API-beállításaiból.
-4. Tedd közzé ezt a mappát egy HTTPS-t támogató statikus webtárhelyen. A telefonos telepítéshez HTTPS szükséges. Androidon a böngésző telepítési gombot kínálhat; iPhone-on nyisd meg Safariban, koppints a Megosztás gombra, majd válaszd a Hozzáadás a főképernyőhöz lehetőséget.
-5. Nyisd meg az alkalmazást mindkét eszközön, válaszd a beállításokat, és mindkét helyen ugyanazt az URL-t és publikus kulcsot mentsd el.
-6. Az egyik eszközön hozz létre Polc-fiókot. Ha e-mailes megerősítést kér a projekt, először erősítsd meg a fiókot a levelezésedből.
-7. A másik eszközön ugyanazzal a Polc-fiókkal jelentkezz be. Ezután a könyvek és saját listák ugyanabból a közös adatbázisból töltődnek be.
+1. A Polc már előre a közös Supabase projekthez van kapcsolva; az URL-t és a böngészős alkalmazásokhoz való publikus kulcsot nem kell eszközönként megadni.
+2. A Supabase projekt SQL Editorában futtasd le a `supabase/schema.sql` teljes tartalmát. Ez létrehozza a könyvek és saját listák tábláit, valamint a hozzáférési szabályokat.
+3. Tedd közzé ezt a mappát egy HTTPS-t támogató statikus webtárhelyen. A telefonos telepítéshez HTTPS szükséges. Androidon a böngésző telepítési gombot kínálhat; iPhone-on nyisd meg Safariban, koppints a Megosztás gombra, majd válaszd a Hozzáadás a főképernyőhöz lehetőséget.
+4. Az egyik eszközön hozz létre Polc-fiókot. Ha e-mailes megerősítést kér a projekt, először erősítsd meg a fiókot a levelezésedből.
+5. A többi eszközön ugyanazzal a Polc-fiókkal jelentkezz be. Ezután a könyvek és saját listák ugyanabból a közös adatbázisból töltődnek be.
 
 Az alkalmazás csak a böngészőben használható publikus kulcsot kéri; **Supabase service role / secret kulcsot soha ne tegyél a böngészőbe**. A táblán bekapcsolt sor szintű jogosultság (RLS) miatt minden fiók csak a saját könyveit olvashatja és módosíthatja. Első bejelentkezéskor a Polc felajánlja, hogy az adott eszközön lévő, még hiányzó könyveket hozzáadja a közös könyvtárhoz; az azonos ISBN-ű vagy című és szerzőjű könyveket nem duplázza.
 
