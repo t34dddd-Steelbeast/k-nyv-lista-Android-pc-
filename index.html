@@ -76,6 +76,10 @@
           <button class="filter-tab" type="button" data-status="Elolvastam" aria-pressed="false">Elolvastam</button>
           <button class="filter-tab" type="button" data-status="Félbehagytam" aria-pressed="false">Félbehagytam</button>
         </nav>
+        <div class="custom-list-toolbar">
+          <div class="custom-list-tabs" id="customListTabs" aria-label="Szűrés saját lista szerint"></div>
+          <button class="button button-quiet manage-lists-button" id="manageListsButton" type="button">Saját listáim</button>
+        </div>
         <div class="books-grid" id="booksGrid" aria-live="polite"></div>
       </section>
       <footer class="page-footer"><span>Olvasni jó. Számon tartani még jobb.</span><button id="exportButton" type="button" class="text-button">Könyvtár mentése fájlba</button></footer>
@@ -94,11 +98,42 @@
           <label class="field"><span>Formátum</span><select id="bookFormat"><option value="book">Könyv</option><option value="ebook">E-könyv</option><option value="audio">Hangoskönyv</option></select></label>
           <label class="field"><span>Olvasási állapot</span><select id="bookStatus"><option>Olvasatlan</option><option>Olvasom</option><option>Elolvastam</option><option>Félbehagytam</option></select></label>
           <label class="field"><span>Műfaj</span><input id="bookCategory" maxlength="80" placeholder="Például: regény" /></label>
-          <label class="field"><span>ISBN</span><input id="bookIsbn" maxlength="32" placeholder="ISBN-azonosító" /></label>
+          <label class="field"><span>Saját lista</span><select id="bookList"><option value="">Nincs listán</option></select></label>
+          <label class="field"><span>ISBN</span><input id="bookIsbn" maxlength="32" inputmode="numeric" placeholder="ISBN-azonosító" /></label>
+          <div class="field isbn-actions-field"><span>ISBN-műveletek</span><div class="isbn-actions"><button class="button button-quiet" id="scanIsbnButton" type="button">Vonalkód beolvasása</button><button class="button button-quiet" id="lookupIsbnButton" type="button">Adatok keresése</button></div></div>
+          <p class="metadata-note full">Adatkereséskor az ISBN-t a Google Books, majd szükség esetén az Open Library kapja meg.</p>
+          <p class="metadata-message full" id="metadataMessage" role="status" aria-live="polite"></p>
+          <label class="field"><span>Kiadó</span><input id="bookPublisher" maxlength="160" placeholder="Kiadó neve" /></label>
+          <label class="field"><span>Kiadás éve</span><input id="bookYear" type="number" inputmode="numeric" min="1000" max="2100" placeholder="Például: 2024" /></label>
+          <label class="field"><span>Oldalszám</span><input id="bookPages" type="number" inputmode="numeric" min="1" max="100000" placeholder="Például: 320" /></label>
+          <label class="field"><span>Borító linkje</span><input id="bookCoverUrl" type="url" inputmode="url" maxlength="500" placeholder="Automatikusan is kitölthető" /></label>
           <label class="field full"><span>Megjegyzés</span><textarea id="bookNotes" rows="3" maxlength="800" placeholder="Gondolatok, idézetek, hol tartasz…"></textarea></label>
         </div>
         <div class="dialog-actions"><button class="button button-quiet" type="button" data-close="bookDialog">Mégse</button><button class="button button-primary" type="submit">Mentés a polcra</button></div>
       </form>
+    </dialog>
+
+    <dialog class="dialog lists-dialog" id="listsDialog" aria-labelledby="listsTitle">
+      <div class="dialog-heading">
+        <div><p class="eyebrow">Saját polcok</p><h2 id="listsTitle">Listáim</h2></div>
+        <button class="icon-button close-dialog" type="button" data-close="listsDialog" aria-label="Bezárás"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg></button>
+      </div>
+      <p class="settings-copy">Hozz létre és nevezz át listákat, például „El szeretném olvasni”. A könyveket szerkesztéskor tudod listához rendelni.</p>
+      <form id="newListForm" class="new-list-form">
+        <label class="field"><span>Új lista neve</span><input id="newListName" maxlength="60" required placeholder="Például: El szeretném olvasni" /></label>
+        <button class="button button-primary" type="submit">Lista hozzáadása</button>
+      </form>
+      <div class="lists-editor" id="listsEditor"></div>
+    </dialog>
+
+    <dialog class="dialog scanner-dialog" id="scannerDialog" aria-labelledby="scannerTitle">
+      <div class="dialog-heading">
+        <div><p class="eyebrow">Könyv hozzáadása</p><h2 id="scannerTitle">ISBN beolvasása</h2></div>
+        <button class="icon-button close-dialog" id="stopScannerButton" type="button" aria-label="Kamera bezárása"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg></button>
+      </div>
+      <div class="scanner-frame"><video id="isbnVideo" playsinline muted aria-label="Kamera képe"></video><span class="scanner-guide" aria-hidden="true"></span></div>
+      <p class="settings-copy scanner-help">Tartsd a könyv hátoldalán lévő vonalkódot a keretbe. A kamera használatához engedélyezd a hozzáférést.</p>
+      <button class="button button-quiet button-wide" id="cancelScannerButton" type="button">Mégse</button>
     </dialog>
 
     <dialog class="dialog settings-dialog" id="settingsDialog" aria-labelledby="settingsTitle">
