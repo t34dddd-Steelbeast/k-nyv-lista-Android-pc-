@@ -17,3 +17,8 @@ Megjegyzés: az adatforrások nem minden könyvhöz adnak vissza minden mezőt, 
 - [x] Legyen induló „El szeretném olvasni” lista, amelyhez a könyvek hozzárendelhetők.
 - [x] A saját listák a közös online könyvtárral szinkronizálódjanak.
 
+## Könyvsorozatok
+
+- [ ] Könyvnél lehessen megadni a sorozat nevét és a kötet sorszámát.
+- [ ] A sorozathoz tartozó könyvek kapjanak jól látható jelölést, és lehessen őket együtt megjeleníteni.
+
