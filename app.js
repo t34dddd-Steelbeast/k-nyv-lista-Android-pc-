@@ -3,7 +3,11 @@
 
   const LOCAL_KEY = 'polc.books.v1';
   const LOCAL_LISTS_KEY = 'polc.lists.v1';
-  const CONFIG_KEY = 'polc.supabase.config.v1';
+  const CONFIG_KEY = 'polc.supabase.config.v2';
+  const DEFAULT_SUPABASE_CONFIG = {
+    url: 'https://liriticqwbpqtcpkbimjh.supabase.co',
+    key: 'sb_publishable_IO9xI-sJ4L2kbMdsmGc1dA_BThy_e78'
+  };
   const DEFAULT_LIST_NAME = 'El szeretném olvasni';
   const LABELS = { book: 'Könyv', ebook: 'E-könyv', audio: 'Hangoskönyv' };
   const STATUS_LABELS = ['Olvasatlan', 'Olvasom', 'Elolvastam', 'Félbehagytam'];
@@ -49,8 +53,11 @@
   function saveCloudCache() { if (state.user) localStorage.setItem(cacheKey(state.user.id), JSON.stringify(state.books)); }
   function saveCloudListsCache() { if (state.user) localStorage.setItem(listsCacheKey(state.user.id), JSON.stringify(state.lists)); }
   function readConfig() {
-    try { return JSON.parse(localStorage.getItem(CONFIG_KEY) || 'null'); }
-    catch { return null; }
+    try {
+      const stored = JSON.parse(localStorage.getItem(CONFIG_KEY) || 'null');
+      if (stored?.url && stored?.key) return stored;
+    } catch {}
+    return DEFAULT_SUPABASE_CONFIG;
   }
 
   function toast(message) {
@@ -80,7 +87,7 @@
     $('#signedInEmail').textContent = state.user?.email || '';
     $('#syncExplanation').innerHTML = state.user
       ? `A könyvtárad <strong>közös online adatbázisból</strong> töltődik be. Jelentkezz be ugyanezzel a fiókkal a többi eszközödön is.`
-      : `Most a könyveid ezen az eszközön vannak. A közös online könyvtárhoz ugyanazt a Supabase projektet állítsd be a telefonon és a számítógépen, majd mindkettőn ugyanazzal a Polc-fiókkal jelentkezz be.`;
+      : `A közös Polc-adatbázis már be van állítva. Hozz létre egy Polc-fiókot, majd jelentkezz be ugyanazzal a fiókkal a telefonon és a számítógépen.`;
     if (state.config) {
       $('#projectUrl').value = state.config.url || '';
       $('#publicKey').value = state.config.key || '';
