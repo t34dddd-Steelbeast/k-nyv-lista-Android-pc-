@@ -277,6 +277,9 @@
   }
 
   function normalizeIsbn(value) { return String(value || '').replace(/[^0-9X]/gi, '').toUpperCase(); }
+  function foldSearchText(value) {
+    return String(value || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLocaleLowerCase('hu').replace(/\s+/g, ' ').trim();
+  }
   function isValidIsbn(value) {
     if (/^97[89]\d{10}$/.test(value)) {
       const sum = [...value.slice(0, 12)].reduce((total, digit, index) => total + Number(digit) * (index % 2 ? 3 : 1), 0);
@@ -297,12 +300,12 @@
     return names[code] || (code ? code.toUpperCase() : '');
   }
 
-  function googleCandidate(item) {
+  function googleCandidate(item, source = 'Google Books') {
     const volume = item.volumeInfo || {};
     const identifiers = volume.industryIdentifiers || [];
     const isbn = identifiers.find(identifier => identifier.type === 'ISBN_13')?.identifier || identifiers.find(identifier => identifier.type === 'ISBN_10')?.identifier || '';
     return {
-      source: 'Google Books',
+      source,
       title: [volume.title, volume.subtitle].filter(Boolean).join(': '),
       author: Array.isArray(volume.authors) ? volume.authors.join(', ') : '',
       isbn,
@@ -315,20 +318,21 @@
     };
   }
 
-  async function searchGoogleBooks(query) {
+  async function searchGoogleBooks(query, { hungarianOnly = false } = {}) {
     const params = new URLSearchParams({ q: query, maxResults: '20', printType: 'books' });
+    if (hungarianOnly) params.set('langRestrict', 'hu');
     const response = await fetch(`https://www.googleapis.com/books/v1/volumes?${params}`);
     if (!response.ok) throw new Error(`Google Books: ${response.status}`);
     const data = await response.json();
-    return (data.items || []).map(googleCandidate).filter(candidate => candidate.title);
+    return (data.items || []).map(item => googleCandidate(item, hungarianOnly ? 'Google Books · magyar nyelv' : 'Google Books')).filter(candidate => candidate.title);
   }
 
-  async function searchOpenLibrary(query) {
+  async function searchOpenLibrary(query, { hungarianOnly = false } = {}) {
     const params = new URLSearchParams({
       lang: 'hu', limit: '20',
       fields: 'key,title,author_name,first_publish_year,cover_i,editions,editions.key,editions.title,editions.language'
     });
-    params.set('q', query);
+    params.set('q', hungarianOnly ? `${query} language:hun` : query);
     const response = await fetch(`https://openlibrary.org/search.json?${params}`);
     if (!response.ok) throw new Error(`Open Library: ${response.status}`);
     const data = await response.json();
@@ -336,18 +340,50 @@
       const editions = work.editions?.docs || [];
       const authorName = Array.isArray(work.author_name) ? work.author_name.join(', ') : '';
       if (!editions.length) return [{
-        source: 'Open Library', title: work.title || '', author: authorName,
+        source: hungarianOnly ? 'Open Library · magyar nyelv' : 'Open Library', title: work.title || '', author: authorName,
         year: getYear(work.first_publish_year),
         coverUrl: work.cover_i ? `https://covers.openlibrary.org/b/id/${work.cover_i}-M.jpg` : '',
         sourceId: work.key || '', language: '', editionKey: ''
       }];
       return editions.map(edition => ({
-        source: 'Open Library', title: edition.title || work.title || '', author: authorName,
+        source: hungarianOnly ? 'Open Library · magyar nyelv' : 'Open Library', title: edition.title || work.title || '', author: authorName,
         year: getYear(work.first_publish_year), language: languageName(edition.language),
         coverUrl: work.cover_i ? `https://covers.openlibrary.org/b/id/${work.cover_i}-M.jpg` : '',
         sourceId: edition.key || work.key || '', editionKey: edition.key || ''
       }));
     }).filter(candidate => candidate.title);
+  }
+
+  function escapeSparqlLiteral(value) {
+    return String(value || '').replace(/\\/g, '\\\\').replace(/"/g, '\\"').replace(/[\r\n]/g, ' ');
+  }
+
+  async function searchMekBooks(query) {
+    const words = [...new Set(query.split(/\s+/).map(word => word.trim()).filter(Boolean))].slice(0, 8);
+    if (!words.length) return [];
+    const matchingTerms = words.map(word => `CONTAINS(LCASE(?searchText), LCASE("${escapeSparqlLiteral(word)}"))`).join(' && ');
+    const sparql = `PREFIX dcterms: <http://purl.org/dc/terms/>\nPREFIX bibo: <http://purl.org/ontology/bibo/>\nPREFIX foaf: <http://xmlns.com/foaf/0.1/>\nPREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>\nSELECT DISTINCT ?record ?title ?author ?publisher ?published ?isbn ?language WHERE {\n  ?record dcterms:title ?title .\n  OPTIONAL { ?record dcterms:creator ?creator }\n  OPTIONAL { ?creator foaf:name ?creatorName }\n  OPTIONAL { ?creator rdfs:label ?creatorLabel }\n  BIND(COALESCE(STR(?creatorName), STR(?creatorLabel), IF(isLiteral(?creator), STR(?creator), "")) AS ?author)\n  OPTIONAL { ?record dcterms:publisher ?publisher }\n  OPTIONAL { ?record dcterms:issued ?issued }\n  OPTIONAL { ?record dcterms:date ?date }\n  BIND(COALESCE(STR(?issued), STR(?date), "") AS ?published)\n  OPTIONAL { ?record bibo:isbn ?isbn }\n  OPTIONAL { ?record dcterms:language ?language }\n  BIND(LCASE(CONCAT(STR(?title), " ", COALESCE(?author, ""), " ", COALESCE(STR(?creator), ""))) AS ?searchText)\n  FILTER(${matchingTerms})\n} LIMIT 20`;
+    const params = new URLSearchParams({ query: sparql, format: 'application/sparql-results+json' });
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 9000);
+    try {
+      const response = await fetch(`https://v.mek.oszk.hu/sparql?${params}`, { signal: controller.signal, headers: { Accept: 'application/sparql-results+json' } });
+      if (!response.ok) throw new Error(`MEK (OSZK): ${response.status}`);
+      const data = await response.json();
+      const bindings = data.results?.bindings || [];
+      return bindings.map(row => {
+        const recordUrl = row.record?.value || '';
+        const sourceUrl = recordUrl.replace('/data/', '/');
+        return {
+          source: 'MEK · OSZK', title: row.title?.value || '', author: row.author?.value || '',
+          publisher: row.publisher?.value || '', year: getYear(row.published?.value),
+          isbn: normalizeIsbn(row.isbn?.value), language: languageName(row.language?.value), sourceId: recordUrl,
+          sourceUrl: /^https:\/\/mek\.oszk\.hu\//i.test(sourceUrl) ? sourceUrl : ''
+        };
+      }).filter(candidate => candidate.title);
+    } finally {
+      clearTimeout(timeout);
+    }
   }
 
   function catalogCandidatesMatch(left, right) {
@@ -379,7 +415,7 @@
   function renderCatalogResults() {
     $('#catalogResults').innerHTML = state.catalogResults.map((candidate, index) => {
       const details = [candidate.language, candidate.publisher, candidate.year, candidate.isbn ? `ISBN ${candidate.isbn}` : ''].filter(Boolean).join(' · ');
-      return `<button class="catalog-result" type="button" data-catalog-index="${index}"><span class="catalog-result-copy"><strong>${esc(candidate.title)}</strong><span>${esc(candidate.author || 'A szerző nem szerepel az adatbázisban')}</span><small>${esc(details || 'A kiadás további adatai kiválasztás után kérhetők le')}</small></span><span class="catalog-result-source">${esc(candidate.source)}</span></button>`;
+      return `<div class="catalog-result-wrap"><button class="catalog-result" type="button" data-catalog-index="${index}"><span class="catalog-result-copy"><strong>${esc(candidate.title)}</strong><span>${esc(candidate.author || 'A szerző nem szerepel az adatbázisban')}</span><small>${esc(details || 'A kiadás további adatai kiválasztás után kérhetők le')}</small></span><span class="catalog-result-source">${esc(candidate.source)}</span></button>${candidate.sourceUrl ? `<a class="catalog-source-link" href="${esc(candidate.sourceUrl)}" target="_blank" rel="noopener noreferrer">MEK-rekord ↗</a>` : ''}</div>`;
     }).join('');
   }
 
@@ -396,12 +432,21 @@
     $('#catalogSearchMessage').textContent = 'Keresés a könyvkatalógusokban…';
     $('#catalogResults').innerHTML = '';
     state.catalogResults = [];
-    const results = await Promise.allSettled([searchGoogleBooks(query), searchOpenLibrary(query)]);
+    const accentFoldedQuery = foldSearchText(query);
+    const searches = [
+      { name: 'Google Books magyar nyelvű', run: () => searchGoogleBooks(query, { hungarianOnly: true }) },
+      { name: 'MEK (OSZK)', run: () => searchMekBooks(query) },
+      { name: 'Open Library magyar nyelvű', run: () => searchOpenLibrary(query, { hungarianOnly: true }) },
+      { name: 'Google Books', run: () => searchGoogleBooks(accentFoldedQuery) },
+      { name: 'Open Library', run: () => searchOpenLibrary(accentFoldedQuery) }
+    ];
+    const results = await Promise.allSettled(searches.map(search => search.run()));
     const successfulGroups = results.filter(result => result.status === 'fulfilled').map(result => result.value);
+    const unavailableSources = results.flatMap((result, index) => result.status === 'rejected' ? [searches[index].name] : []);
     state.catalogResults = mergeCatalogCandidates(successfulGroups);
     renderCatalogResults();
     if (state.catalogResults.length) {
-      $('#catalogSearchMessage').textContent = `${state.catalogResults.length} találat. Válaszd ki a megfelelő nyelvet, kiadást vagy ISBN-t.`;
+      $('#catalogSearchMessage').textContent = `${state.catalogResults.length} találat. Válaszd ki a megfelelő nyelvet, kiadást vagy ISBN-t.${unavailableSources.length ? ` Nem válaszolt: ${[...new Set(unavailableSources)].join(', ')}.` : ''}`;
     } else if (!successfulGroups.length) {
       $('#catalogSearchMessage').textContent = 'Most nem sikerült elérni a könyvkatalógusokat. Ellenőrizd az internetet, vagy add meg kézzel az adatokat.';
     } else {
@@ -641,7 +686,7 @@
   function rowToList(row) { return { id: row.id, name: row.name }; }
   function listToRow(list) { return { id: list.id, user_id: state.user.id, name: list.name }; }
 
-  function normalizedMatchText(value) { return String(value || '').toLocaleLowerCase('hu').replace(/\s+/g, ' ').trim(); }
+  function normalizedMatchText(value) { return foldSearchText(value); }
   function sameBookRecord(left, right) {
     if (!left || !right || (left.format || 'book') !== (right.format || 'book')) return false;
     const leftIsbn = normalizeIsbn(left.isbn);
@@ -994,3 +1039,4 @@
 
   boot();
 })();
+
