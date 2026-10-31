@@ -93,10 +93,9 @@
         </div>
         <input type="hidden" id="bookId" />
         <section class="catalog-search-panel" id="catalogSearchPanel" aria-label="Könyv keresése az adatbázisokban">
-          <p class="catalog-search-intro">Keress cím alapján, és válaszd ki a megfelelő könyvet vagy kiadást.</p>
+          <p class="catalog-search-intro">Írd be egy mezőbe a címet, a szerzőt vagy mindkettőt, és válaszd ki a megfelelő könyvet vagy kiadást.</p>
           <div class="catalog-search-fields">
-            <label class="field"><span>Könyv címe</span><input id="catalogTitle" type="search" maxlength="160" placeholder="Például: Mr. Mercedes" autocomplete="off" /></label>
-            <label class="field"><span>Szerző <small>nem kötelező</small></span><input id="catalogAuthor" maxlength="120" placeholder="Például: Stephen King" autocomplete="off" /></label>
+            <label class="field"><span>Keresés a könyvadatbázisokban</span><input id="catalogQuery" type="search" maxlength="240" placeholder="Például: Ragyogás Stephen King" autocomplete="off" /></label>
             <button class="button button-primary" id="searchCatalogButton" type="button">Könyvek keresése</button>
           </div>
           <p class="metadata-note">A Google Books és az Open Library találatai jelennek meg. A nyelvet, kiadót és ISBN-t ellenőrizd a választásnál.</p>
@@ -181,4 +180,3 @@
     <input id="importInput" type="file" accept="application/json,.json" hidden />
   </body>
 </html>
-

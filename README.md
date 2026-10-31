@@ -34,7 +34,7 @@ Az alkalmazás csak a böngészőben használható publikus kulcsot kéri; **Sup
 
 ## Könyv keresése és automatikus adatok
 
-Az ISBN- és cím szerinti keresés internetkapcsolatot igényel. Az alkalmazás a Google Books és az Open Library katalógusában keres, és több találat esetén kiadásválasztó listát mutat. A kiválasztott rekordból a cím, szerző, ISBN, kiadó, év, oldalszám és borító kerülhet az űrlapra. Az adatok teljessége könyvenként eltérhet; mentés előtt ellenőrizd őket. A kamerás vonalkód-beolvasáshoz HTTPS, kameraengedély és támogatott böngésző szükséges; más esetben az ISBN kézzel is beírható.
+Az ISBN- és könyv szerinti keresés internetkapcsolatot igényel. A könyvkereső egy mezőben fogad címet, szerzőt vagy a kettőt együtt. Az alkalmazás a Google Books és az Open Library katalógusában keres, és több találat esetén kiadásválasztó listát mutat. A kiválasztott rekordból a cím, szerző, ISBN, kiadó, év, oldalszám és borító kerülhet az űrlapra. Az adatok teljessége könyvenként eltérhet; mentés előtt ellenőrizd őket. A kamerás vonalkód-beolvasáshoz HTTPS, kameraengedély és támogatott böngésző szükséges; más esetben az ISBN kézzel is beírható.
 
 ## Fontos a helyi és a felhős könyvtárakról
 
@@ -45,4 +45,3 @@ A helyi könyvek nem töltődnek fel automatikusan a felhőbe. Ha bejelentkezés
 - `index.html`, `styles.css`, `app.js`: alkalmazás
 - `manifest.webmanifest`, `sw.js`, `icon.svg`, `icon-192.png`, `icon-512.png`: telepíthető PWA és offline alkalmazásváz
 - `supabase/schema.sql`: adatbázistábla és hozzáférési szabályok
-

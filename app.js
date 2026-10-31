@@ -315,25 +315,20 @@
     };
   }
 
-  async function searchGoogleBooks(title, author) {
-    const quote = value => `"${value.replace(/["\\]/g, ' ').replace(/\s+/g, ' ').trim()}"`;
-    const terms = [];
-    if (title) terms.push(`intitle:${quote(title)}`);
-    if (author) terms.push(`inauthor:${quote(author)}`);
-    const params = new URLSearchParams({ q: terms.join(' '), maxResults: '10', printType: 'books' });
+  async function searchGoogleBooks(query) {
+    const params = new URLSearchParams({ q: query, maxResults: '20', printType: 'books' });
     const response = await fetch(`https://www.googleapis.com/books/v1/volumes?${params}`);
     if (!response.ok) throw new Error(`Google Books: ${response.status}`);
     const data = await response.json();
     return (data.items || []).map(googleCandidate).filter(candidate => candidate.title);
   }
 
-  async function searchOpenLibrary(title, author) {
+  async function searchOpenLibrary(query) {
     const params = new URLSearchParams({
-      lang: 'hu', limit: '10',
+      lang: 'hu', limit: '20',
       fields: 'key,title,author_name,first_publish_year,cover_i,editions,editions.key,editions.title,editions.language'
     });
-    if (title) params.set('title', title);
-    if (author) params.set('author', author);
+    params.set('q', query);
     const response = await fetch(`https://openlibrary.org/search.json?${params}`);
     if (!response.ok) throw new Error(`Open Library: ${response.status}`);
     const data = await response.json();
@@ -389,11 +384,10 @@
   }
 
   async function searchCatalogBooks() {
-    const title = $('#catalogTitle').value.trim();
-    const author = $('#catalogAuthor').value.trim();
-    if (!title && !author) {
-      $('#catalogSearchMessage').textContent = 'Írd be legalább a könyv címét vagy a szerző nevét.';
-      $('#catalogTitle').focus();
+    const query = $('#catalogQuery').value.trim();
+    if (!query) {
+      $('#catalogSearchMessage').textContent = 'Írd be a könyv címét, a szerzőt vagy mindkettőt.';
+      $('#catalogQuery').focus();
       return;
     }
     const button = $('#searchCatalogButton');
@@ -402,7 +396,7 @@
     $('#catalogSearchMessage').textContent = 'Keresés a könyvkatalógusokban…';
     $('#catalogResults').innerHTML = '';
     state.catalogResults = [];
-    const results = await Promise.allSettled([searchGoogleBooks(title, author), searchOpenLibrary(title, author)]);
+    const results = await Promise.allSettled([searchGoogleBooks(query), searchOpenLibrary(query)]);
     const successfulGroups = results.filter(result => result.status === 'fulfilled').map(result => result.value);
     state.catalogResults = mergeCatalogCandidates(successfulGroups);
     renderCatalogResults();
@@ -411,7 +405,7 @@
     } else if (!successfulGroups.length) {
       $('#catalogSearchMessage').textContent = 'Most nem sikerült elérni a könyvkatalógusokat. Ellenőrizd az internetet, vagy add meg kézzel az adatokat.';
     } else {
-      $('#catalogSearchMessage').textContent = 'Nem találtam egyezést. Próbálj meg csak a címmel vagy a szerzővel keresni, esetleg add meg kézzel az adatokat.';
+      $('#catalogSearchMessage').textContent = 'Nem találtam egyezést. Próbálj meg másik címet (például az eredeti címet), vagy add meg kézzel az adatokat.';
     }
     button.disabled = false;
     button.textContent = 'Könyvek keresése';
@@ -888,8 +882,7 @@
     $('#bookForm').addEventListener('submit', saveBookFromForm);
     $('#lookupIsbnButton').addEventListener('click', lookupBookMetadata);
     $('#searchCatalogButton').addEventListener('click', searchCatalogBooks);
-    $('#catalogTitle').addEventListener('keydown', event => { if (event.key === 'Enter') { event.preventDefault(); searchCatalogBooks(); } });
-    $('#catalogAuthor').addEventListener('keydown', event => { if (event.key === 'Enter') { event.preventDefault(); searchCatalogBooks(); } });
+    $('#catalogQuery').addEventListener('keydown', event => { if (event.key === 'Enter') { event.preventDefault(); searchCatalogBooks(); } });
     $('#catalogResults').addEventListener('click', event => {
       const result = event.target.closest('[data-catalog-index]');
       if (result) selectCatalogBook(Number(result.dataset.catalogIndex));
@@ -1001,4 +994,3 @@
 
   boot();
 })();
-
