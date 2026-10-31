@@ -1,4 +1,4 @@
-const CACHE_NAME = 'polc-shell-v2';
+const CACHE_NAME = 'polc-shell-v3';
 const SHELL = ['./', './index.html', './styles.css', './app.js', './manifest.webmanifest', './icon.svg', './icon-192.png', './icon-512.png'];
 
 self.addEventListener('install', event => {

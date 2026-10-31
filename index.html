@@ -92,6 +92,18 @@
           <button class="icon-button close-dialog" type="button" data-close="bookDialog" aria-label="Bezárás"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg></button>
         </div>
         <input type="hidden" id="bookId" />
+        <section class="catalog-search-panel" id="catalogSearchPanel" aria-label="Könyv keresése az adatbázisokban">
+          <p class="catalog-search-intro">Keress cím alapján, és válaszd ki a megfelelő könyvet vagy kiadást.</p>
+          <div class="catalog-search-fields">
+            <label class="field"><span>Könyv címe</span><input id="catalogTitle" type="search" maxlength="160" placeholder="Például: Mr. Mercedes" autocomplete="off" /></label>
+            <label class="field"><span>Szerző <small>nem kötelező</small></span><input id="catalogAuthor" maxlength="120" placeholder="Például: Stephen King" autocomplete="off" /></label>
+            <button class="button button-primary" id="searchCatalogButton" type="button">Könyvek keresése</button>
+          </div>
+          <p class="metadata-note">A Google Books és az Open Library találatai jelennek meg. A nyelvet, kiadót és ISBN-t ellenőrizd a választásnál.</p>
+          <p class="catalog-search-message" id="catalogSearchMessage" role="status" aria-live="polite"></p>
+          <div class="catalog-results" id="catalogResults" aria-live="polite"></div>
+        </section>
+        <div class="catalog-divider" id="manualEntryDivider"><span>vagy add meg kézzel / ISBN alapján</span></div>
         <div class="form-grid">
           <label class="field full"><span>Cím <b>*</b></span><input id="bookTitle" required maxlength="160" placeholder="A könyv címe" /></label>
           <label class="field full"><span>Szerző <b>*</b></span><input id="bookAuthor" required maxlength="120" placeholder="Szerző neve" /></label>
@@ -101,7 +113,7 @@
           <label class="field"><span>Saját lista</span><select id="bookList"><option value="">Nincs listán</option></select></label>
           <label class="field"><span>ISBN</span><input id="bookIsbn" maxlength="32" inputmode="numeric" placeholder="ISBN-azonosító" /></label>
           <div class="field isbn-actions-field"><span>ISBN-műveletek</span><div class="isbn-actions"><button class="button button-quiet" id="scanIsbnButton" type="button">Vonalkód beolvasása</button><button class="button button-quiet" id="lookupIsbnButton" type="button">Adatok keresése</button></div></div>
-          <p class="metadata-note full">Adatkereséskor az ISBN-t a Google Books, majd szükség esetén az Open Library kapja meg.</p>
+          <p class="metadata-note full">ISBN alapján a Google Books, majd szükség esetén az Open Library keres. A formátumot lent választhatod ki.</p>
           <p class="metadata-message full" id="metadataMessage" role="status" aria-live="polite"></p>
           <label class="field"><span>Kiadó</span><input id="bookPublisher" maxlength="160" placeholder="Kiadó neve" /></label>
           <label class="field"><span>Kiadás éve</span><input id="bookYear" type="number" inputmode="numeric" min="1000" max="2100" placeholder="Például: 2024" /></label>
@@ -144,6 +156,7 @@
       <div class="settings-copy" id="syncExplanation"></div>
       <div id="accountPanel">
         <form id="configForm" class="config-form">
+          <p class="settings-copy setup-copy">A közös könyvtárhoz egy Supabase projekt szükséges. A projekt URL-jét és publikus kulcsát ezen az eszközön és a másikon is ugyanúgy állítsd be.</p>
           <label class="field"><span>Supabase projekt URL</span><input id="projectUrl" type="url" inputmode="url" placeholder="https://....supabase.co" autocomplete="url" /></label>
           <label class="field"><span>Supabase anon / publishable kulcs</span><input id="publicKey" type="password" autocomplete="off" placeholder="sb_publishable_… vagy anon kulcs" /></label>
           <button class="button button-quiet button-wide" type="submit">Beállítások mentése</button>

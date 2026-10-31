@@ -9,6 +9,7 @@ Telefonon és számítógépen használható, telepíthető webalkalmazás köny
 - Egyéni könyvlisták létrehozása, átnevezése és törlése; induláskor az „El szeretném olvasni” lista jelenik meg
 - ISBN-13 beolvasása a telefon kamerájával olyan biztonságos böngészőben, amely támogatja a vonalkód-olvasást
 - ISBN alapján adatkeresés a Google Booksban, majd hiányos találat esetén az Open Libraryben
+- Könyv keresése cím és szerző alapján, majd a találatok közül kiadás kiválasztása
 - Keresés, szűrés és könyvtári összesítő
 - Helyi használat internet nélkül, az adatok az adott böngészőben maradnak
 - JSON-mentés a könyvtár biztonsági másolatához
@@ -23,19 +24,19 @@ Nyisd meg az `index.html` fájlt egy korszerű böngészőben. A helyi könyvlis
 
 Az eszközök közötti megosztáshoz egy Supabase projekt szükséges.
 
-1. Hozz létre egy Supabase projektet.
+1. Hozz létre egy Supabase projektet. Ezt egyszer kell megtenned; a Polc közvetlenül a te projektedet használja.
 2. A projekt SQL Editorában futtasd le a `supabase/schema.sql` teljes tartalmát. Ha már korábban beállítottad a Polc adatbázisát, ezt az új változatot is futtasd le: hozzáadja a saját listák és a könyv-adatmezők tábláit/oszlopait, a meglévő könyveket nem törli.
 3. Másold ki a projekt URL-jét és a publikus `anon` vagy `publishable` kulcsát a projekt API-beállításaiból.
 4. Tedd közzé ezt a mappát egy HTTPS-t támogató statikus webtárhelyen. A telefonos telepítéshez HTTPS szükséges. Androidon a böngésző telepítési gombot kínálhat; iPhone-on nyisd meg Safariban, koppints a Megosztás gombra, majd válaszd a Hozzáadás a főképernyőhöz lehetőséget.
-5. Nyisd meg az alkalmazást, válaszd a beállításokat, add meg az URL-t és a publikus kulcsot, majd mentsd el.
-6. Hozz létre fiókot, vagy jelentkezz be. Ha e-mailes megerősítést kér a projekt, először erősítsd meg a fiókot a levelezésedből.
-7. A számítógépen és a telefonon is ugyanezt az alkalmazást és ugyanazt a fiókot használd. A könyvek a közös adatbázisból töltődnek be.
+5. Nyisd meg az alkalmazást mindkét eszközön, válaszd a beállításokat, és mindkét helyen ugyanazt az URL-t és publikus kulcsot mentsd el.
+6. Az egyik eszközön hozz létre Polc-fiókot. Ha e-mailes megerősítést kér a projekt, először erősítsd meg a fiókot a levelezésedből.
+7. A másik eszközön ugyanazzal a Polc-fiókkal jelentkezz be. Ezután a könyvek és saját listák ugyanabból a közös adatbázisból töltődnek be.
 
-Az alkalmazás csak a böngészőben használható publikus kulcsot kéri; **Supabase service role / secret kulcsot soha ne tegyél a böngészőbe**. A táblán bekapcsolt sor szintű jogosultság (RLS) miatt minden fiók csak a saját könyveit olvashatja és módosíthatja.
+Az alkalmazás csak a böngészőben használható publikus kulcsot kéri; **Supabase service role / secret kulcsot soha ne tegyél a böngészőbe**. A táblán bekapcsolt sor szintű jogosultság (RLS) miatt minden fiók csak a saját könyveit olvashatja és módosíthatja. Első bejelentkezéskor a Polc felajánlja, hogy az adott eszközön lévő, még hiányzó könyveket hozzáadja a közös könyvtárhoz; az azonos ISBN-ű vagy című és szerzőjű könyveket nem duplázza.
 
-## ISBN és automatikus könyvadatok
+## Könyv keresése és automatikus adatok
 
-Az ISBN keresés internetkapcsolatot igényel. Az alkalmazás először a Google Books katalógusát, majd hiányzó adat esetén az Open Libraryt kérdezi le. A cím, szerző, kiadó, év, oldalszám és borító adatainak teljessége könyvenként eltérhet; mentés előtt ellenőrizd az eredményt. Az ISBN-kódot a két nyilvános katalógushoz küldi el az alkalmazás. A kamerás vonalkód-beolvasáshoz HTTPS, kameraengedély és támogatott böngésző szükséges; más esetben az ISBN kézzel is beírható.
+Az ISBN- és cím szerinti keresés internetkapcsolatot igényel. Az alkalmazás a Google Books és az Open Library katalógusában keres, és több találat esetén kiadásválasztó listát mutat. A kiválasztott rekordból a cím, szerző, ISBN, kiadó, év, oldalszám és borító kerülhet az űrlapra. Az adatok teljessége könyvenként eltérhet; mentés előtt ellenőrizd őket. A kamerás vonalkód-beolvasáshoz HTTPS, kameraengedély és támogatott böngésző szükséges; más esetben az ISBN kézzel is beírható.
 
 ## Fontos a helyi és a felhős könyvtárakról
 

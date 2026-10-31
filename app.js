@@ -7,7 +7,7 @@
   const DEFAULT_LIST_NAME = 'El szeretném olvasni';
   const LABELS = { book: 'Könyv', ebook: 'E-könyv', audio: 'Hangoskönyv' };
   const STATUS_LABELS = ['Olvasatlan', 'Olvasom', 'Elolvastam', 'Félbehagytam'];
-  const state = { books: [], lists: [], status: 'all', listFilter: 'all', format: 'all', query: '', mode: 'local', user: null, client: null, config: null, installPrompt: null, toastTimer: null, scannerStream: null, scannerActive: false, scannerBusy: false };
+  const state = { books: [], lists: [], status: 'all', listFilter: 'all', format: 'all', query: '', mode: 'local', user: null, client: null, config: null, installPrompt: null, toastTimer: null, scannerStream: null, scannerActive: false, scannerBusy: false, catalogResults: [] };
 
   const $ = (selector, root = document) => root.querySelector(selector);
   const $$ = (selector, root = document) => [...root.querySelectorAll(selector)];
@@ -80,7 +80,7 @@
     $('#signedInEmail').textContent = state.user?.email || '';
     $('#syncExplanation').innerHTML = state.user
       ? `A könyvtárad <strong>közös online adatbázisból</strong> töltődik be. Jelentkezz be ugyanezzel a fiókkal a többi eszközödön is.`
-      : `Most a könyveid ezen az eszközön vannak. A közös online könyvtárhoz add meg a projekt adatait, majd jelentkezz be — a többi eszközön ugyanazt a fiókot használd.`;
+      : `Most a könyveid ezen az eszközön vannak. A közös online könyvtárhoz ugyanazt a Supabase projektet állítsd be a telefonon és a számítógépen, majd mindkettőn ugyanazzal a Polc-fiókkal jelentkezz be.`;
     if (state.config) {
       $('#projectUrl').value = state.config.url || '';
       $('#publicKey').value = state.config.key || '';
@@ -148,6 +148,11 @@
 
   function openBook(book = null) {
     $('#bookForm').reset();
+    $('#catalogSearchPanel').hidden = Boolean(book);
+    $('#manualEntryDivider').hidden = Boolean(book);
+    $('#catalogSearchMessage').textContent = '';
+    $('#catalogResults').innerHTML = '';
+    state.catalogResults = [];
     $('#bookId').value = book?.id || '';
     $('#bookTitle').value = book?.title || '';
     $('#bookAuthor').value = book?.author || '';
@@ -278,6 +283,174 @@
     return false;
   }
   function getYear(value) { return String(value || '').match(/(?:1[0-9]{3}|20[0-9]{2}|2100)/)?.[0] || ''; }
+
+  function languageName(value) {
+    const code = String(Array.isArray(value) ? value[0] : value || '').split('/').pop().toLowerCase();
+    const names = { hu: 'magyar', hun: 'magyar', en: 'angol', eng: 'angol', de: 'német', ger: 'német', deu: 'német', fr: 'francia', fre: 'francia', fra: 'francia', es: 'spanyol', spa: 'spanyol', it: 'olasz', ita: 'olasz', pl: 'lengyel', pol: 'lengyel', ru: 'orosz', rus: 'orosz', cs: 'cseh', cze: 'cseh', ces: 'cseh', sk: 'szlovák', slo: 'szlovák', slk: 'szlovák' };
+    return names[code] || (code ? code.toUpperCase() : '');
+  }
+
+  function googleCandidate(item) {
+    const volume = item.volumeInfo || {};
+    const identifiers = volume.industryIdentifiers || [];
+    const isbn = identifiers.find(identifier => identifier.type === 'ISBN_13')?.identifier || identifiers.find(identifier => identifier.type === 'ISBN_10')?.identifier || '';
+    return {
+      source: 'Google Books',
+      title: [volume.title, volume.subtitle].filter(Boolean).join(': '),
+      author: Array.isArray(volume.authors) ? volume.authors.join(', ') : '',
+      isbn,
+      publisher: volume.publisher || '',
+      year: getYear(volume.publishedDate),
+      pages: volume.pageCount || '',
+      coverUrl: safeCoverUrl(volume.imageLinks?.thumbnail?.replace(/^http:/i, 'https:') || ''),
+      language: languageName(volume.language),
+      sourceId: item.id || ''
+    };
+  }
+
+  async function searchGoogleBooks(title, author) {
+    const quote = value => `"${value.replace(/["\\]/g, ' ').replace(/\s+/g, ' ').trim()}"`;
+    const terms = [];
+    if (title) terms.push(`intitle:${quote(title)}`);
+    if (author) terms.push(`inauthor:${quote(author)}`);
+    const params = new URLSearchParams({ q: terms.join(' '), maxResults: '10', printType: 'books' });
+    const response = await fetch(`https://www.googleapis.com/books/v1/volumes?${params}`);
+    if (!response.ok) throw new Error(`Google Books: ${response.status}`);
+    const data = await response.json();
+    return (data.items || []).map(googleCandidate).filter(candidate => candidate.title);
+  }
+
+  async function searchOpenLibrary(title, author) {
+    const params = new URLSearchParams({
+      lang: 'hu', limit: '10',
+      fields: 'key,title,author_name,first_publish_year,cover_i,editions,editions.key,editions.title,editions.language'
+    });
+    if (title) params.set('title', title);
+    if (author) params.set('author', author);
+    const response = await fetch(`https://openlibrary.org/search.json?${params}`);
+    if (!response.ok) throw new Error(`Open Library: ${response.status}`);
+    const data = await response.json();
+    return (data.docs || []).flatMap(work => {
+      const editions = work.editions?.docs || [];
+      const authorName = Array.isArray(work.author_name) ? work.author_name.join(', ') : '';
+      if (!editions.length) return [{
+        source: 'Open Library', title: work.title || '', author: authorName,
+        year: getYear(work.first_publish_year),
+        coverUrl: work.cover_i ? `https://covers.openlibrary.org/b/id/${work.cover_i}-M.jpg` : '',
+        sourceId: work.key || '', language: '', editionKey: ''
+      }];
+      return editions.map(edition => ({
+        source: 'Open Library', title: edition.title || work.title || '', author: authorName,
+        year: getYear(work.first_publish_year), language: languageName(edition.language),
+        coverUrl: work.cover_i ? `https://covers.openlibrary.org/b/id/${work.cover_i}-M.jpg` : '',
+        sourceId: edition.key || work.key || '', editionKey: edition.key || ''
+      }));
+    }).filter(candidate => candidate.title);
+  }
+
+  function catalogCandidatesMatch(left, right) {
+    const leftIsbn = normalizeIsbn(left.isbn);
+    const rightIsbn = normalizeIsbn(right.isbn);
+    if (leftIsbn && rightIsbn) return leftIsbn === rightIsbn;
+    const sameText = (a, b) => normalizedMatchText(a) === normalizedMatchText(b);
+    if (!left.title || !right.title || !sameText(left.title, right.title)) return false;
+    if (left.author && right.author && !sameText(left.author, right.author)) return false;
+    return ['year', 'publisher', 'language'].every(field => !left[field] || !right[field] || sameText(left[field], right[field]));
+  }
+
+  function mergeCatalogCandidates(groups) {
+    const candidates = [];
+    for (const candidate of groups.flat()) {
+      const existingIndex = candidates.findIndex(existing => catalogCandidatesMatch(existing, candidate));
+      if (existingIndex === -1) {
+        candidates.push(candidate);
+      } else {
+        const existing = candidates[existingIndex];
+        const merged = Object.fromEntries(Object.entries(existing).map(([field, value]) => [field, value || candidate[field]]));
+        if (!existing.source.includes(candidate.source)) merged.source = `${existing.source} + ${candidate.source}`;
+        candidates[existingIndex] = merged;
+      }
+    }
+    return candidates;
+  }
+
+  function renderCatalogResults() {
+    $('#catalogResults').innerHTML = state.catalogResults.map((candidate, index) => {
+      const details = [candidate.language, candidate.publisher, candidate.year, candidate.isbn ? `ISBN ${candidate.isbn}` : ''].filter(Boolean).join(' · ');
+      return `<button class="catalog-result" type="button" data-catalog-index="${index}"><span class="catalog-result-copy"><strong>${esc(candidate.title)}</strong><span>${esc(candidate.author || 'A szerző nem szerepel az adatbázisban')}</span><small>${esc(details || 'A kiadás további adatai kiválasztás után kérhetők le')}</small></span><span class="catalog-result-source">${esc(candidate.source)}</span></button>`;
+    }).join('');
+  }
+
+  async function searchCatalogBooks() {
+    const title = $('#catalogTitle').value.trim();
+    const author = $('#catalogAuthor').value.trim();
+    if (!title && !author) {
+      $('#catalogSearchMessage').textContent = 'Írd be legalább a könyv címét vagy a szerző nevét.';
+      $('#catalogTitle').focus();
+      return;
+    }
+    const button = $('#searchCatalogButton');
+    button.disabled = true;
+    button.textContent = 'Keresés…';
+    $('#catalogSearchMessage').textContent = 'Keresés a könyvkatalógusokban…';
+    $('#catalogResults').innerHTML = '';
+    state.catalogResults = [];
+    const results = await Promise.allSettled([searchGoogleBooks(title, author), searchOpenLibrary(title, author)]);
+    const successfulGroups = results.filter(result => result.status === 'fulfilled').map(result => result.value);
+    state.catalogResults = mergeCatalogCandidates(successfulGroups);
+    renderCatalogResults();
+    if (state.catalogResults.length) {
+      $('#catalogSearchMessage').textContent = `${state.catalogResults.length} találat. Válaszd ki a megfelelő nyelvet, kiadást vagy ISBN-t.`;
+    } else if (!successfulGroups.length) {
+      $('#catalogSearchMessage').textContent = 'Most nem sikerült elérni a könyvkatalógusokat. Ellenőrizd az internetet, vagy add meg kézzel az adatokat.';
+    } else {
+      $('#catalogSearchMessage').textContent = 'Nem találtam egyezést. Próbálj meg csak a címmel vagy a szerzővel keresni, esetleg add meg kézzel az adatokat.';
+    }
+    button.disabled = false;
+    button.textContent = 'Könyvek keresése';
+  }
+
+  async function openLibraryEditionMetadata(candidate) {
+    if (!candidate.editionKey) return candidate;
+    const response = await fetch(`https://openlibrary.org${candidate.editionKey}.json`);
+    if (!response.ok) return candidate;
+    const edition = await response.json();
+    const isbn = edition.isbn_13?.[0] || edition.isbn_10?.[0] || '';
+    const coverId = edition.covers?.[0];
+    return {
+      ...candidate,
+      title: [edition.title, edition.subtitle].filter(Boolean).join(': ') || candidate.title,
+      isbn: isbn || candidate.isbn || '',
+      publisher: edition.publishers?.[0] || candidate.publisher || '',
+      year: getYear(edition.publish_date) || candidate.year || '',
+      pages: edition.number_of_pages || candidate.pages || '',
+      coverUrl: coverId ? `https://covers.openlibrary.org/b/id/${coverId}-M.jpg` : candidate.coverUrl,
+      language: languageName(edition.languages?.[0]?.key) || candidate.language
+    };
+  }
+
+  async function selectCatalogBook(index) {
+    const candidate = state.catalogResults[index];
+    if (!candidate) return;
+    const button = $(`[data-catalog-index="${index}"]`, $('#catalogResults'));
+    if (button) button.disabled = true;
+    $('#catalogSearchMessage').textContent = `A kiadás adatainak betöltése (${candidate.source})…`;
+    let metadata = candidate;
+    if (candidate.editionKey) {
+      try { metadata = await openLibraryEditionMetadata(candidate); }
+      catch (error) { console.warn('Az Open Library kiadásadatai nem érhetők el.', error); }
+    }
+    const fields = { title: '#bookTitle', author: '#bookAuthor', publisher: '#bookPublisher', year: '#bookYear', pages: '#bookPages', coverUrl: '#bookCoverUrl' };
+    for (const [key, selector] of Object.entries(fields)) {
+      if (metadata[key]) $(selector).value = metadata[key];
+    }
+    if (metadata.isbn) $('#bookIsbn').value = normalizeIsbn(metadata.isbn);
+    const source = candidate.source || 'könyvkatalógus';
+    $('#metadataMessage').textContent = `Kiválasztott kiadás (${source}). Ellenőrizd az adatokat, és lent válaszd ki, hogy könyvként, e-könyvként vagy hangoskönyvként tartod nyilván.`;
+    $('#catalogSearchMessage').textContent = `Betöltve: ${metadata.title || candidate.title}`;
+    if (button) button.disabled = false;
+    $('#bookTitle').scrollIntoView({ block: 'center', behavior: 'smooth' });
+  }
 
   async function googleBooksMetadata(isbn) {
     const response = await fetch(`https://www.googleapis.com/books/v1/volumes?q=isbn:${encodeURIComponent(isbn)}&maxResults=5`);
@@ -467,6 +640,83 @@
   function rowToList(row) { return { id: row.id, name: row.name }; }
   function listToRow(list) { return { id: list.id, user_id: state.user.id, name: list.name }; }
 
+  function normalizedMatchText(value) { return String(value || '').toLocaleLowerCase('hu').replace(/\s+/g, ' ').trim(); }
+  function sameBookRecord(left, right) {
+    if (!left || !right || (left.format || 'book') !== (right.format || 'book')) return false;
+    const leftIsbn = normalizeIsbn(left.isbn);
+    const rightIsbn = normalizeIsbn(right.isbn);
+    if (leftIsbn && rightIsbn) return leftIsbn === rightIsbn;
+    return normalizedMatchText(left.title) === normalizedMatchText(right.title)
+      && normalizedMatchText(left.author) === normalizedMatchText(right.author);
+  }
+
+  async function mergeLocalListsIntoCloud(localLists) {
+    const client = await getClient();
+    const { data, error } = await client.from('book_lists').select('*').order('created_at', { ascending: true });
+    if (error) throw error;
+    const cloudLists = (data || []).map(rowToList);
+    const idMap = new Map();
+    for (const localList of localLists) {
+      let cloudList = cloudLists.find(list => normalizedMatchText(list.name) === normalizedMatchText(localList.name));
+      if (!cloudList) {
+        const { data: inserted, error: insertError } = await client.from('book_lists')
+          .insert({ id: createId(), user_id: state.user.id, name: localList.name })
+          .select().single();
+        if (insertError?.code === '23505') {
+          const { data: refreshed, error: refreshError } = await client.from('book_lists').select('*').order('created_at', { ascending: true });
+          if (refreshError) throw refreshError;
+          cloudLists.splice(0, cloudLists.length, ...(refreshed || []).map(rowToList));
+          cloudList = cloudLists.find(list => normalizedMatchText(list.name) === normalizedMatchText(localList.name));
+        } else if (insertError) {
+          throw insertError;
+        } else {
+          cloudList = rowToList(inserted);
+          cloudLists.push(cloudList);
+        }
+      }
+      if (cloudList) idMap.set(localList.id, cloudList.id);
+    }
+    state.lists = cloudLists;
+    saveCloudListsCache();
+    return idMap;
+  }
+
+  async function mergeLocalBooksIntoCloud(localBooks, listIdMap) {
+    if (!localBooks.length) return 0;
+    const remoteBooks = [...state.books];
+    const changes = [];
+    for (const localBook of localBooks) {
+      const local = { ...localBook, customListId: listIdMap.get(localBook.customListId) || '' };
+      const match = remoteBooks.find(book => book.id === local.id) || remoteBooks.find(book => sameBookRecord(book, local));
+      if (match) {
+        const localUpdated = Date.parse(local.updatedAt || local.addedAt || '') || 0;
+        const remoteUpdated = Date.parse(match.updatedAt || match.addedAt || '') || 0;
+        if (localUpdated > remoteUpdated) {
+          const updated = { ...local, id: match.id, addedAt: match.addedAt || local.addedAt };
+          changes.push(updated);
+          remoteBooks[remoteBooks.indexOf(match)] = updated;
+        }
+        continue;
+      }
+      const idInUse = remoteBooks.some(book => book.id === local.id);
+      const added = { ...local, id: idInUse ? createId() : local.id };
+      changes.push(added);
+      remoteBooks.push(added);
+    }
+    if (!changes.length || !confirm(`Ezen az eszközön ${changes.length} olyan helyi könyv van, amely még nincs naprakészen a közös könyvtárban. Hozzáadjam vagy frissítsem őket? Az azonos könyvek nem kerülnek be kétszer.`)) return 0;
+    const client = await getClient();
+    const { error } = await client.from('books').upsert(changes.map(bookToRow), { onConflict: 'id' });
+    if (error) throw error;
+    return changes.length;
+  }
+
+  async function mergeLocalLibraryIntoCloud(localBooks, localLists) {
+    const listIdMap = await mergeLocalListsIntoCloud(localLists);
+    const changedBooks = await mergeLocalBooksIntoCloud(localBooks, listIdMap);
+    if (changedBooks) await refreshCloud();
+    else render();
+  }
+
   async function refreshCloud() {
     const client = await getClient();
     if (!state.user) return;
@@ -569,6 +819,7 @@
 
   async function authenticate(mode) {
     const localBooks = readLocal();
+    const localLists = readLocalLists();
     const url = $('#projectUrl').value.trim();
     const key = $('#publicKey').value.trim();
     if (!validateConfig(url, key)) {
@@ -594,19 +845,11 @@
       setConnection('cloud', 'Online könyvtár');
       updateSettingsView();
       await refreshCloud();
-      if (state.books.length === 0 && localBooks.length > 0 && confirm(`A közös könyvtár még üres. Feltöltöd a mostani ${localBooks.length} helyi könyvedet is?`)) {
-        try {
-          const cloudBooks = localBooks.map(book => ({ ...book, id: crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(16).slice(2)}` }));
-          const { error: uploadError } = await client.from('books').insert(cloudBooks.map(bookToRow));
-          if (uploadError) throw uploadError;
-          await refreshCloud();
-        } catch (uploadError) {
-          console.error(uploadError);
-          toast('Bejelentkeztél, de a helyi könyvek feltöltése nem sikerült. A helyi lista megmaradt.');
-        }
-      }
+      let mergeFailed = false;
+      try { await mergeLocalLibraryIntoCloud(localBooks, localLists); }
+      catch (mergeError) { mergeFailed = true; console.error(mergeError); }
       $('#settingsDialog').close();
-      toast(mode === 'signup' ? 'Fiók létrehozva, könyvtár szinkronizálva.' : 'Bejelentkezve, könyvtár szinkronizálva.');
+      toast(mergeFailed ? 'Bejelentkeztél, de a helyi könyvek vagy listák összefésülése nem sikerült. A helyi adatok megmaradtak ezen az eszközön.' : mode === 'signup' ? 'Fiók létrehozva, könyvtár szinkronizálva.' : 'Bejelentkezve, könyvtár szinkronizálva.');
     } catch (error) {
       console.error(error);
       const message = /Invalid login credentials/i.test(error?.message || '') ? 'Hibás e-mail-cím vagy jelszó.' : /fetch|network/i.test(error?.message || '') ? 'Nem érhető el a szolgáltatás. Ellenőrizd a projekt URL-t és az internetet.' : error?.message || 'Nem sikerült bejelentkezni.';
@@ -637,6 +880,13 @@
     });
     $('#bookForm').addEventListener('submit', saveBookFromForm);
     $('#lookupIsbnButton').addEventListener('click', lookupBookMetadata);
+    $('#searchCatalogButton').addEventListener('click', searchCatalogBooks);
+    $('#catalogTitle').addEventListener('keydown', event => { if (event.key === 'Enter') { event.preventDefault(); searchCatalogBooks(); } });
+    $('#catalogAuthor').addEventListener('keydown', event => { if (event.key === 'Enter') { event.preventDefault(); searchCatalogBooks(); } });
+    $('#catalogResults').addEventListener('click', event => {
+      const result = event.target.closest('[data-catalog-index]');
+      if (result) selectCatalogBook(Number(result.dataset.catalogIndex));
+    });
     $('#scanIsbnButton').addEventListener('click', startScanner);
     $('#manageListsButton').addEventListener('click', openListsDialog);
     $('#newListForm').addEventListener('submit', createCustomList);
