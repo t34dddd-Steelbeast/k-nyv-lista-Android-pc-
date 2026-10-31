@@ -9,6 +9,7 @@ Telefonon és számítógépen használható, telepíthető webalkalmazás köny
 - Egyéni könyvlisták létrehozása, átnevezése és törlése; induláskor az „El szeretném olvasni” lista jelenik meg
 - ISBN-13 beolvasása a telefon kamerájával olyan biztonságos böngészőben, amely támogatja a vonalkód-olvasást
 - ISBN alapján adatkeresés a Google Booksban, majd hiányos találat esetén az Open Libraryben
+- Cím/szerző keresése a Google Booksban, az Open Libraryben és az OSZK Magyar Elektronikus Könyvtárának nyílt katalógusában
 - Könyv keresése cím és szerző alapján, majd a találatok közül kiadás kiválasztása
 - Keresés, szűrés és könyvtári összesítő
 - Helyi használat internet nélkül, az adatok az adott böngészőben maradnak
@@ -34,7 +35,9 @@ Az alkalmazás csak a böngészőben használható publikus kulcsot kéri; **Sup
 
 ## Könyv keresése és automatikus adatok
 
-Az ISBN- és könyv szerinti keresés internetkapcsolatot igényel. A könyvkereső egy mezőben fogad címet, szerzőt vagy a kettőt együtt. Az alkalmazás a Google Books és az Open Library katalógusában keres, és több találat esetén kiadásválasztó listát mutat. A kiválasztott rekordból a cím, szerző, ISBN, kiadó, év, oldalszám és borító kerülhet az űrlapra. Az adatok teljessége könyvenként eltérhet; mentés előtt ellenőrizd őket. A kamerás vonalkód-beolvasáshoz HTTPS, kameraengedély és támogatott böngésző szükséges; más esetben az ISBN kézzel is beírható.
+Az ISBN- és könyv szerinti keresés internetkapcsolatot igényel. A könyvkereső egy mezőben fogad címet, szerzőt vagy a kettőt együtt. Címkereséskor az alkalmazás a Google Books magyar nyelvű és általános találatai, az Open Library magyar kiadásai és általános találatai, valamint az OSZK Magyar Elektronikus Könyvtárának nyílt bibliográfiai adatai között keres. A MEK gyűjteménye főként digitális, szabadon olvasható műveket tartalmaz, ezért nem helyettesíti a friss, jogvédett kiadások katalógusát. Több találat esetén kiadásválasztó lista jelenik meg. A kiválasztott rekordból cím, szerző, ISBN, kiadó, év, oldalszám és borító kerülhet az űrlapra. Az adatok teljessége könyvenként eltérhet; mentés előtt ellenőrizd őket. A kamerás vonalkód-beolvasáshoz HTTPS, kameraengedély és támogatott böngésző szükséges; más esetben az ISBN kézzel is beírható.
+
+Az OSZK NEKTÁR katalógusa a címkeresőből még nem kérdezhető le közvetlenül: az OSZK Z39.50 kapcsolatot biztosít, amihez külön szerveroldali átjáró szükséges. A fejlesztési listán szerepel ennek megoldása.
 
 ## Fontos a helyi és a felhős könyvtárakról
 
@@ -45,3 +48,4 @@ A helyi könyvek nem töltődnek fel automatikusan a felhőbe. Ha bejelentkezés
 - `index.html`, `styles.css`, `app.js`: alkalmazás
 - `manifest.webmanifest`, `sw.js`, `icon.svg`, `icon-192.png`, `icon-512.png`: telepíthető PWA és offline alkalmazásváz
 - `supabase/schema.sql`: adatbázistábla és hozzáférési szabályok
+
