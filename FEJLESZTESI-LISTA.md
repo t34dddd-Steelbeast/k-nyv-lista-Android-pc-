@@ -17,8 +17,12 @@ Megjegyzés: az adatforrások nem minden könyvhöz adnak vissza minden mezőt, 
 - [x] Legyen induló „El szeretném olvasni” lista, amelyhez a könyvek hozzárendelhetők.
 - [x] A saját listák a közös online könyvtárral szinkronizálódjanak.
 
-## Könyvsorozatok
+## Kapcsolódó könyvek és ajánlott olvasási sorrend
 
-- [ ] Könyvnél lehessen megadni a sorozat nevét és a kötet sorszámát.
-- [ ] A sorozathoz tartozó könyvek kapjanak jól látható jelölést, és lehessen őket együtt megjeleníteni.
+- [ ] A könyv adatainak lekérésekor az alkalmazás próbálja automatikusan felismerni a sorozatot és az ajánlott sorrendben elfoglalt helyét.
+- [ ] A keresési találatban és a könyv adatlapján is jelenjen meg például: „3. az ajánlott olvasási sorrendben”.
+- [ ] A kapcsolódó könyvek listája mutassa a teljes sorrendet, és jelezze, mely könyvek vannak meg, melyeket olvastam el, és melyek hiányoznak.
+- [ ] Ha az adatforrás nem találja meg vagy tévesen jelöli a kapcsolatot, lehessen a sorrendet kézzel létrehozni és javítani.
+
+Megjegyzés: az automatikus felismerés csak azoknál a könyveknél működhet, amelyekről az adatforrás tartalmaz sorozat- és sorrendadatot; ezért szükséges a kézi javítás lehetősége is.
 
