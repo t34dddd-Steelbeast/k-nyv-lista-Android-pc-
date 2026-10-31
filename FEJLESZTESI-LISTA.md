@@ -16,8 +16,11 @@ Megjegyzés: az adatforrások nem minden könyvhöz adnak vissza minden mezőt, 
 
 ## Magyar nyelvű könyvadatok bővítése
 
-- [ ] Megvizsgálni magyar kiadói és könyvtári adatforrások integrálását, mert a Google Books és az Open Library lefedettsége nem teljes.
-- [ ] Ha egy adatforrás csak keresőoldalt kínál, ellenőrizni, hogy van-e engedélyezett, stabil API, mielőtt összekötnénk az alkalmazással.
+- [x] Cím/szerző keresés az OSZK Magyar Elektronikus Könyvtárának nyílt SPARQL katalógusában.
+- [x] Google Books magyar nyelvű találatainak előre sorolása, a szélesebb kereséssel együtt.
+- [x] Open Library magyar kiadásainak külön keresése, az általános találatok megtartásával.
+- [ ] Az OSZK NEKTÁR Z39.50 adatforrásához szerveroldali átjáró készítése és közzététele.
+- [ ] További magyar katalógusok integrálása csak dokumentált és engedélyezett API-n keresztül.
 
 ## Saját könyvlisták és olvasási állapotok
 
@@ -33,3 +36,4 @@ Megjegyzés: az adatforrások nem minden könyvhöz adnak vissza minden mezőt, 
 - [ ] Ha az adatforrás nem találja meg vagy tévesen jelöli a kapcsolatot, lehessen a sorrendet kézzel létrehozni és javítani.
 
 Megjegyzés: az automatikus felismerés csak azoknál a könyveknél működhet, amelyekről az adatforrás tartalmaz sorozat- és sorrendadatot; ezért szükséges a kézi javítás lehetősége is.
+
