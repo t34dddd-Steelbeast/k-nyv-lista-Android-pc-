@@ -12,7 +12,7 @@
   const DEFAULT_LIST_NAME = 'El szeretném olvasni';
   const LABELS = { book: 'Könyv', ebook: 'E-könyv', audio: 'Hangoskönyv' };
   const STATUS_LABELS = ['Olvasatlan', 'Olvasom', 'Elolvastam', 'Félbehagytam'];
-  const state = { books: [], lists: [], status: 'all', listFilter: 'all', format: 'all', query: '', mode: 'local', user: null, client: null, config: null, installPrompt: null, toastTimer: null, scannerStream: null, scannerActive: false, scannerBusy: false, scannerSearchMode: false, catalogResults: [], catalogSearchTimer: null, catalogSearchSequence: 0, catalogSearchController: null };
+  const state = { books: [], lists: [], status: 'all', listFilter: 'all', format: 'all', query: '', mode: 'local', user: null, client: null, config: null, installPrompt: null, toastTimer: null, scannerStream: null, scannerActive: false, scannerBusy: false, scannerSearchMode: false, catalogResults: [], catalogSearchTimer: null, catalogSearchSequence: 0, catalogSearchController: null, catalogSearchLastQuery: '' };
 
   const $ = (selector, root = document) => root.querySelector(selector);
   const $$ = (selector, root = document) => [...root.querySelectorAll(selector)];
@@ -158,6 +158,7 @@
   function openBook(book = null) {
     clearTimeout(state.catalogSearchTimer);
     state.catalogSearchController?.abort();
+    state.catalogSearchLastQuery = '';
     state.catalogSearchSequence += 1;
     $('#bookForm').reset();
     $('#catalogSearchPanel').hidden = Boolean(book);
@@ -282,6 +283,20 @@
   }
 
   function normalizeIsbn(value) { return String(value || '').replace(/[^0-9X]/gi, '').toUpperCase(); }
+  function normalizeCatalogQuery(value) {
+    return String(value || '').normalize('NFKC').replace(/[\u200B-\u200D\uFEFF]/g, '').replace(/[\s\u00A0]+/g, ' ').trim().replace(/[.,;:!?]+$/u, '').trim();
+  }
+  function relaxedCatalogQueries(value) {
+    const words = normalizeCatalogQuery(value).split(' ').filter(Boolean);
+    const queries = [];
+    for (let size = words.length - 1; size >= 1; size -= 1) {
+      for (let start = 0; start + size <= words.length; start += 1) {
+        const query = words.slice(start, start + size).join(' ');
+        if (query.length >= 2 && !queries.includes(query)) queries.push(query);
+      }
+    }
+    return queries.slice(0, 4);
+  }
   function foldSearchText(value) {
     return String(value || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLocaleLowerCase('hu').replace(/\s+/g, ' ').trim();
   }
@@ -439,7 +454,7 @@
   }
 
   async function searchCatalogBooks(queryValue = $('#catalogQuery').value, { requestId = null } = {}) {
-    const query = String(queryValue || '').trim();
+    const query = normalizeCatalogQuery(queryValue);
     if (!query) {
       $('#catalogSearchMessage').textContent = 'Írd be a könyv címét, a szerzőt vagy mindkettőt.';
       $('#catalogQuery').focus();
@@ -455,10 +470,11 @@
     state.catalogSearchTimer = null;
     const currentRequestId = requestId ?? state.catalogSearchSequence + 1;
     state.catalogSearchSequence = currentRequestId;
+    state.catalogSearchLastQuery = query;
     state.catalogSearchController?.abort();
     const controller = new AbortController();
     state.catalogSearchController = controller;
-    const isCurrent = () => currentRequestId === state.catalogSearchSequence && $('#catalogQuery').value.trim() === query;
+    const isCurrent = () => currentRequestId === state.catalogSearchSequence && normalizeCatalogQuery($('#catalogQuery').value) === query;
     const button = $('#searchCatalogButton');
     button.disabled = true;
     button.textContent = 'Keresés…';
@@ -495,12 +511,34 @@
         return group;
       })));
       if (!isCurrent()) return [];
-      const successfulGroups = results.filter(result => result.status === 'fulfilled').map(result => result.value);
+      let successfulGroups = results.filter(result => result.status === 'fulfilled').map(result => result.value);
       const googleUnavailable = results.some((result, index) => result.status === 'rejected' && searches[index].name.startsWith('Google Books'));
       const googleKeyMissing = !localStorage.getItem(GOOGLE_BOOKS_KEY)?.trim();
       const molySearchLink = $('#molySearchLink');
       molySearchLink.href = `https://moly.hu/kereses?q=${encodeURIComponent(normalizedQuery || query)}`;
       state.catalogResults = mergeCatalogCandidates(successfulGroups);
+      if (!exactIsbn && !state.catalogResults.length) {
+        const fallbackQueries = relaxedCatalogQueries(normalizedQuery);
+        for (const fallbackQuery of fallbackQueries) {
+          if (!isCurrent()) return [];
+          $('#catalogSearchMessage').textContent = 'Pontos találat nincs, próbálok lazább címkeresést…';
+          const foldedFallback = foldSearchText(normalizeHungarianBookQuery(fallbackQuery));
+          const fallbackSearches = [
+            () => searchGoogleBooks(fallbackQuery, { hungarianOnly: true, signal }),
+            () => searchMekBooks(fallbackQuery, { signal }),
+            () => searchOpenLibrary(fallbackQuery, { hungarianOnly: true, signal }),
+            () => searchGoogleBooks(foldedFallback, { signal }),
+            () => searchOpenLibrary(foldedFallback, { signal })
+          ];
+          const fallbackResults = await Promise.allSettled(fallbackSearches.map(run => Promise.resolve().then(run)));
+          if (!isCurrent()) return [];
+          successfulGroups = successfulGroups.concat(fallbackResults.filter(result => result.status === 'fulfilled').map(result => result.value));
+          state.catalogResults = mergeCatalogCandidates(successfulGroups);
+          renderCatalogResults();
+          if (state.catalogResults.length) break;
+        }
+      }
+      if (!isCurrent()) return [];
       renderCatalogResults();
       molySearchLink.hidden = Boolean(state.catalogResults.length);
       if (state.catalogResults.length) {
@@ -523,11 +561,13 @@
   }
 
   function scheduleCatalogSearch() {
+    const query = normalizeCatalogQuery($('#catalogQuery').value);
+    if (query && query === state.catalogSearchLastQuery) return;
     clearTimeout(state.catalogSearchTimer);
     state.catalogSearchController?.abort();
     state.catalogSearchController = null;
     const requestId = ++state.catalogSearchSequence;
-    const query = $('#catalogQuery').value.trim();
+    state.catalogSearchLastQuery = query;
     const button = $('#searchCatalogButton');
     button.disabled = false;
     button.textContent = 'Keresés';
