@@ -19,6 +19,7 @@ Megjegyzés: az adatforrások nem minden könyvhöz adnak vissza minden mezőt, 
 - [x] Cím/szerző keresés az OSZK Magyar Elektronikus Könyvtárának nyílt SPARQL katalógusában.
 - [x] Google Books magyar nyelvű találatainak előre sorolása, a szélesebb kereséssel együtt.
 - [x] Open Library magyar kiadásainak külön keresése, az általános találatok megtartásával.
+- [x] Hiányzó szerzőadat pótlása a magyar Wikipédia Wikidata-kapcsolatából, ha van pontos című rekord.
 - [ ] Az OSZK NEKTÁR Z39.50 adatforrásához szerveroldali átjáró készítése és közzététele.
 - [ ] További magyar katalógusok integrálása csak dokumentált és engedélyezett API-n keresztül.
 
