@@ -10,6 +10,7 @@ Telefonon és számítógépen használható, telepíthető webalkalmazás köny
 - ISBN-13 beolvasása a telefon kamerájával olyan biztonságos böngészőben, amely támogatja a vonalkód-olvasást
 - ISBN alapján adatkeresés a Google Booksban, majd hiányos találat esetén az Open Libraryben
 - Cím/szerző keresése a Google Booksban, az Open Libraryben és az OSZK Magyar Elektronikus Könyvtárának nyílt katalógusában; hiányzó szerzőadat pótlása Wikidatából, ha a magyar Wikipédia pontos című cikket tartalmaz
+- Cím, szerző vagy ISBN keresése az OSZK NEKTÁR katalógusában bejelentkezett Polc-fiókkal
 - Könyv keresése cím és szerző alapján, majd a találatok közül kiadás kiválasztása
 - Keresés, szűrés és könyvtári összesítő
 - Helyi használat internet nélkül, az adatok az adott böngészőben maradnak
@@ -37,7 +38,7 @@ Az alkalmazás csak a böngészőben használható publikus kulcsot kéri; **Sup
 
 Az ISBN- és könyv szerinti keresés internetkapcsolatot igényel. A könyvkereső egy mezőben fogad címet, szerzőt vagy a kettőt együtt. A Google Books nyilvános adataihoz API-kulcs szükséges. Ezt a Polc Beállítások ablakában lehet megadni; a kulcsot a program az adott böngészőben tárolja, ezért telefonon és számítógépen külön kell beírni. A Google Cloudban a kulcsot korlátozd a Polc GitHub Pages webcímére és a Books API-ra. Címkereséskor az alkalmazás a Google Books magyar nyelvű és általános találatai, az Open Library magyar kiadásai és általános találatai, valamint az OSZK Magyar Elektronikus Könyvtárának nyílt bibliográfiai adatai között keres. Ha egy találatból hiányzik a szerző, a magyar Wikipédia pontos című cikkén keresztül megpróbálja kiegészíteni az adatot a Wikidatából. A MEK gyűjteménye főként digitális, szabadon olvasható műveket tartalmaz, ezért nem helyettesíti a friss, jogvédett kiadások katalógusát. Több találat esetén kiadásválasztó lista jelenik meg. A kiválasztott rekordból cím, szerző, ISBN, kiadó, év, oldalszám és borító kerülhet az űrlapra. Az adatok teljessége könyvenként eltérhet; mentés előtt ellenőrizd őket. A kamerás vonalkód-beolvasáshoz HTTPS, kameraengedély és támogatott böngésző szükséges; más esetben az ISBN kézzel is beírható.
 
-Az OSZK NEKTÁR katalógusa a címkeresőből még nem kérdezhető le közvetlenül: az OSZK Z39.50 kapcsolatot biztosít, amihez külön szerveroldali átjáró szükséges. A fejlesztési listán szerepel ennek megoldása.
+Az OSZK NEKTÁR a Supabase Edge Functionön keresztül kereshető. A kereséshez be kell jelentkezni a Polc-fiókba; a kérés a Supabase-munkamenet tokenjével hitelesül, a függvény JWT-ellenőrzése bekapcsolva marad. A NEKTÁR felé csak olvasási keresés történik.
 
 ## Fontos a helyi és a felhős könyvtárakról
 
