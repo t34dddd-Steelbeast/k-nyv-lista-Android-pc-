@@ -8,8 +8,8 @@
     <title>Polc — Saját könyvtár</title>
     <link rel="manifest" href="manifest.webmanifest" />
     <link rel="icon" href="icon.svg" type="image/svg+xml" />
-    <link rel="stylesheet" href="styles.css?v=0.1.8" />
-    <script src="app.js?v=0.1.8" defer></script>
+    <link rel="stylesheet" href="styles.css?v=0.1.9" />
+    <script src="app.js?v=0.1.9" defer></script>
   </head>
   <body>
     <header class="topbar">
@@ -17,7 +17,7 @@
         <span class="brand-mark" aria-hidden="true">
           <svg viewBox="0 0 32 32" fill="none"><path d="M5.5 7.5c4.3-.8 7.8.2 10.5 2.5v15c-2.7-2.3-6.2-3.3-10.5-2.5v-15Z"/><path d="M26.5 7.5c-4.3-.8-7.8.2-10.5 2.5v15c2.7-2.3 6.2-3.3 10.5-2.5v-15Z"/><path d="M16 10v15"/></svg>
         </span>
-        <span class="brand-copy"><strong>polc<span class="app-version" aria-label="Alkalmazásverzió 0.1.8" title="Alkalmazásverzió">v0.1.8</span></strong><small>a saját könyvtárad</small></span>
+        <span class="brand-copy"><strong>polc<span class="app-version" aria-label="Alkalmazásverzió 0.1.9" title="Alkalmazásverzió">v0.1.9</span></strong><small>a saját könyvtárad</small></span>
       </a>
       <div class="top-actions">
         <span class="connection-badge local" id="connectionBadge"><i></i><span id="connectionText">Helyi tárhely</span></span>
@@ -98,7 +98,7 @@
             <label class="field"><span>Keresés a könyvadatbázisokban</span><input id="catalogQuery" type="search" maxlength="240" placeholder="Cím, szerző vagy ISBN" autocomplete="off" aria-controls="catalogResults" /></label>
             <div class="catalog-search-actions"><button class="button button-primary" id="searchCatalogButton" type="button">Keresés</button><button class="button button-quiet" id="scanCatalogIsbnButton" type="button">ISBN beolvasása</button></div>
           </div>
-          <p class="metadata-note">Magyar nyelvű találatokat keresek a Google Booksban és az Open Libraryben, valamint az OSZK Magyar Elektronikus Könyvtárában. A Google Books használatához API-kulcs kell, amelyet a Beállításokban adhatsz meg. A kiadót és az ISBN-t ellenőrizd a választásnál.</p>
+          <p class="metadata-note">Magyar nyelvű találatokat keresek a Google Booksban és az Open Libraryben, valamint az OSZK Magyar Elektronikus Könyvtárában. A hiányzó szerzőadatot pontos című magyar Wikipédia-cikk esetén a Wikidatából is kiegészítem. A Google Books használatához API-kulcs kell, amelyet a Beállításokban adhatsz meg. A kiadót és az ISBN-t ellenőrizd a választásnál.</p>
           <p class="catalog-search-message" id="catalogSearchMessage" role="status" aria-live="polite"></p>
           <a class="catalog-search-link" id="molySearchLink" href="https://moly.hu/" target="_blank" rel="noopener noreferrer" hidden>Magyar könyv keresése a Molyon ↗</a>
           <div class="catalog-results" id="catalogResults" aria-live="polite"></div>
