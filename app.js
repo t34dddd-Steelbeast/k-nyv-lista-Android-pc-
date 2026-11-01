@@ -392,6 +392,45 @@
     }).filter(candidate => candidate.title);
   }
 
+  async function searchWikidataAuthors(title, { signal } = {}) {
+    const pageParams = new URLSearchParams({
+      action: 'query', prop: 'pageprops', titles: title, ppprop: 'wikibase_item', format: 'json', origin: '*'
+    });
+    const pageResponse = await fetch(`https://hu.wikipedia.org/w/api.php?${pageParams}`, { signal });
+    if (!pageResponse.ok) throw new Error(`Wikipédia: ${pageResponse.status}`);
+    const pageData = await pageResponse.json();
+    const page = Object.values(pageData.query?.pages || {}).find(item => item.pageid);
+    if (!page?.title || catalogTitleKey(page.title) !== catalogTitleKey(title)) return null;
+    const itemId = page.pageprops?.wikibase_item;
+    if (!itemId) return null;
+
+    const entityParams = new URLSearchParams({
+      action: 'wbgetentities', ids: itemId, props: 'claims|labels', languages: 'hu|en', format: 'json', origin: '*'
+    });
+    const entityResponse = await fetch(`https://www.wikidata.org/w/api.php?${entityParams}`, { signal });
+    if (!entityResponse.ok) throw new Error(`Wikidata: ${entityResponse.status}`);
+    const entityData = await entityResponse.json();
+    const entity = entityData.entities?.[itemId];
+    const authorClaims = entity?.claims?.P50 || [];
+    const authorIds = [...new Set(authorClaims.map(claim => claim.mainsnak?.datavalue?.value?.id).filter(Boolean))];
+    let authorLabels = {};
+    if (authorIds.length) {
+      const labelsParams = new URLSearchParams({
+        action: 'wbgetentities', ids: authorIds.join('|'), props: 'labels', languages: 'hu|en', format: 'json', origin: '*'
+      });
+      const labelsResponse = await fetch(`https://www.wikidata.org/w/api.php?${labelsParams}`, { signal });
+      if (!labelsResponse.ok) throw new Error(`Wikidata: ${labelsResponse.status}`);
+      authorLabels = (await labelsResponse.json()).entities || {};
+    }
+    const authors = authorIds.map(authorId => {
+      const labels = authorLabels[authorId]?.labels;
+      return labels?.hu?.value || labels?.en?.value || '';
+    });
+    const namedAuthors = (entity?.claims?.P2093 || []).map(claim => claim.mainsnak?.datavalue?.value || '');
+    const author = [...new Set([...authors, ...namedAuthors].map(value => String(value).trim()).filter(Boolean))].join(', ');
+    return author ? { source: 'Wikidata', title: page.title, author } : null;
+  }
+
   function escapeSparqlLiteral(value) {
     return String(value || '').replace(/\\/g, '\\\\').replace(/"/g, '\\"').replace(/[\r\n]/g, ' ');
   }
@@ -472,6 +511,7 @@
     for (const title of titles) {
       const lookups = [searchOpenLibrary(title, { titleOnly: true, signal })];
       if (localStorage.getItem(GOOGLE_BOOKS_KEY)?.trim()) lookups.push(searchGoogleBooks(googleTitleQuery(title), { signal }));
+      lookups.push(searchWikidataAuthors(title, { signal }).then(candidate => candidate ? [candidate] : []));
       const results = await Promise.allSettled(lookups);
       const matches = results.filter(result => result.status === 'fulfilled').flatMap(result => result.value);
       const match = matches.find(candidate => candidate.author && catalogTitlesMatch(title, candidate.title));
@@ -1235,7 +1275,7 @@
         render();
       }
     }
-    if ('serviceWorker' in navigator && location.protocol !== 'file:') navigator.serviceWorker.register('./sw.js?v=0.1.8', { updateViaCache: 'none' }).catch(() => {});
+    if ('serviceWorker' in navigator && location.protocol !== 'file:') navigator.serviceWorker.register('./sw.js?v=0.1.9', { updateViaCache: 'none' }).catch(() => {});
   }
 
   boot();
