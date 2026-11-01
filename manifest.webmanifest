@@ -3,7 +3,7 @@
   "short_name": "Polc",
   "description": "Könyvek, e-könyvek és hangoskönyvek egy helyen.",
   "lang": "hu-HU",
-  "start_url": "./?v=0.1.8",
+  "start_url": "./?v=0.1.9",
   "scope": "./",
   "display": "standalone",
   "background_color": "#f6f3ed",
