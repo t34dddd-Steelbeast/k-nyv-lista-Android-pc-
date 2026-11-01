@@ -444,6 +444,43 @@
     return candidates;
   }
 
+  function catalogTitleKey(value) {
+    return foldSearchText(value).split(':')[0].replace(/[^\p{L}\p{N}]+/gu, ' ').trim();
+  }
+
+  function catalogTitlesMatch(left, right) {
+    return Boolean(catalogTitleKey(left) && catalogTitleKey(left) === catalogTitleKey(right));
+  }
+
+  async function enrichCatalogAuthors(candidates, { signal } = {}) {
+    let enriched = candidates.map((candidate, index) => {
+      if (candidate.author) return candidate;
+      const sibling = candidates.find((other, otherIndex) => otherIndex !== index && other.author && catalogTitlesMatch(candidate.title, other.title));
+      return sibling ? { ...candidate, author: sibling.author } : candidate;
+    });
+    const titles = [...new Set(enriched.filter(candidate => !candidate.author).map(candidate => candidate.title).filter(Boolean))].slice(0, 3);
+    for (const title of titles) {
+      const lookups = [searchOpenLibrary(title, { signal })];
+      if (localStorage.getItem(GOOGLE_BOOKS_KEY)?.trim()) lookups.push(searchGoogleBooks(title, { signal }));
+      const results = await Promise.allSettled(lookups);
+      const matches = results.filter(result => result.status === 'fulfilled').flatMap(result => result.value);
+      const match = matches.find(candidate => candidate.author && catalogTitlesMatch(title, candidate.title));
+      if (!match) continue;
+      enriched = enriched.map(candidate => {
+        if (candidate.author || !catalogTitlesMatch(title, candidate.title)) return candidate;
+        return {
+          ...candidate,
+          author: match.author,
+          publisher: candidate.publisher || match.publisher || '',
+          year: candidate.year || match.year || '',
+          coverUrl: candidate.coverUrl || match.coverUrl || '',
+          source: candidate.source.includes(match.source) ? candidate.source : `${candidate.source} + ${match.source}`
+        };
+      });
+    }
+    return enriched;
+  }
+
   function renderCatalogResults() {
     $('#catalogResults').innerHTML = state.catalogResults.map((candidate, index) => {
       const details = [candidate.language, candidate.publisher, candidate.year, candidate.isbn ? `ISBN ${candidate.isbn}` : ''].filter(Boolean).join(' · ');
@@ -517,6 +554,12 @@
       const molySearchLink = $('#molySearchLink');
       molySearchLink.href = `https://moly.hu/kereses?q=${encodeURIComponent(normalizedQuery || query)}`;
       state.catalogResults = mergeCatalogCandidates(successfulGroups);
+      if (!exactIsbn && state.catalogResults.some(candidate => !candidate.author)) {
+        $('#catalogSearchMessage').textContent = 'A címet megtaláltam; szerzőadatot keresek a többi könyvkatalógusban…';
+        state.catalogResults = await enrichCatalogAuthors(state.catalogResults, { signal });
+        if (!isCurrent()) return [];
+        renderCatalogResults();
+      }
       if (!exactIsbn && !state.catalogResults.length) {
         const fallbackQueries = relaxedCatalogQueries(normalizedQuery);
         for (const fallbackQuery of fallbackQueries) {
@@ -1186,7 +1229,7 @@
         render();
       }
     }
-    if ('serviceWorker' in navigator && location.protocol !== 'file:') navigator.serviceWorker.register('./sw.js?v=0.1.6', { updateViaCache: 'none' }).catch(() => {});
+    if ('serviceWorker' in navigator && location.protocol !== 'file:') navigator.serviceWorker.register('./sw.js?v=0.1.7', { updateViaCache: 'none' }).catch(() => {});
   }
 
   boot();
