@@ -1,5 +1,5 @@
-const CACHE_NAME = 'polc-shell-v14';
-const SHELL = ['./', './index.html', './styles.css', './app.js', './index.html?v=0.1.7', './styles.css?v=0.1.7', './app.js?v=0.1.7', './manifest.webmanifest', './icon.svg', './icon-192.png', './icon-512.png'];
+const CACHE_NAME = 'polc-shell-v15';
+const SHELL = ['./', './index.html', './styles.css', './app.js', './index.html?v=0.1.8', './styles.css?v=0.1.8', './app.js?v=0.1.8', './manifest.webmanifest', './icon.svg', './icon-192.png', './icon-512.png'];
 
 self.addEventListener('install', event => {
   event.waitUntil(caches.open(CACHE_NAME).then(cache => cache.addAll(SHELL)).then(() => self.skipWaiting()));

@@ -286,19 +286,21 @@
   function normalizeCatalogQuery(value) {
     return String(value || '').normalize('NFKC').replace(/[\u200B-\u200D\uFEFF]/g, '').replace(/[\s\u00A0]+/g, ' ').trim().replace(/[.,;:!?]+$/u, '').trim();
   }
-  function relaxedCatalogQueries(value) {
-    const words = normalizeCatalogQuery(value).split(' ').filter(Boolean);
-    const queries = [];
-    for (let size = words.length - 1; size >= 1; size -= 1) {
-      for (let start = 0; start + size <= words.length; start += 1) {
-        const query = words.slice(start, start + size).join(' ');
-        if (query.length >= 2 && !queries.includes(query)) queries.push(query);
-      }
-    }
-    return queries.slice(0, 4);
-  }
   function foldSearchText(value) {
     return String(value || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLocaleLowerCase('hu').replace(/\s+/g, ' ').trim();
+  }
+  function googleTitleQuery(value) {
+    return `intitle:"${String(value || '').replace(/["\\]/g, ' ').replace(/\s+/g, ' ').trim()}"`;
+  }
+  function catalogCandidateMatchesQuery(query, candidate) {
+    const isbn = normalizeIsbn(query);
+    if (isValidIsbn(isbn)) return true;
+    const stopWords = new Set(['a', 'az', 'the', 'of', 'and', 'or', 'de', 'der', 'die', 'das', 'és']);
+    const terms = foldSearchText(query).replace(/[^\p{L}\p{N}]+/gu, ' ').split(' ').filter(term => term.length > 1 && !stopWords.has(term));
+    if (!terms.length) return true;
+    const text = foldSearchText(`${candidate.title || ''} ${candidate.author || ''}`).replace(/[^\p{L}\p{N}]+/gu, ' ');
+    const candidateTerms = new Set(text.split(' '));
+    return terms.every(term => candidateTerms.has(term));
   }
   function normalizeHungarianBookQuery(value) {
     return String(value || '').replace(/\S+/gu, word => word.replace(/(ás|és)t$/iu, '$1')).replace(/\s+/g, ' ').trim();
@@ -348,19 +350,27 @@
     if (!apiKey) throw new Error('Google Books API-kulcs nincs beállítva');
     params.set('key', apiKey);
     const response = await fetch(`https://www.googleapis.com/books/v1/volumes?${params}`, { signal });
-    if (!response.ok) throw new Error(`Google Books: ${response.status}`);
-    const data = await response.json();
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      const detail = String(data.error?.message || '').trim();
+      throw new Error(`Google Books ${response.status}${detail ? `: ${detail}` : ''}`);
+    }
     return (data.items || []).map(item => googleCandidate(item, hungarianOnly ? 'Google Books · magyar nyelv' : 'Google Books')).filter(candidate => candidate.title);
   }
 
-  async function searchOpenLibrary(query, { hungarianOnly = false, signal } = {}) {
+  async function searchOpenLibrary(query, { hungarianOnly = false, titleOnly = false, signal } = {}) {
     const params = new URLSearchParams({
       lang: 'hu', limit: '20',
       fields: 'key,title,author_name,first_publish_year,cover_i,editions,editions.key,editions.title,editions.language'
     });
     const isbn = normalizeIsbn(query);
     const searchQuery = isValidIsbn(isbn) ? `isbn:${isbn}` : query;
-    params.set('q', hungarianOnly ? `${searchQuery} language:hun` : searchQuery);
+    if (!isValidIsbn(isbn) && titleOnly) {
+      params.set('title', searchQuery);
+      if (hungarianOnly) params.set('q', 'language:hun');
+    } else {
+      params.set('q', hungarianOnly ? `${searchQuery} language:hun` : searchQuery);
+    }
     const response = await fetch(`https://openlibrary.org/search.json?${params}`, { signal });
     if (!response.ok) throw new Error(`Open Library: ${response.status}`);
     const data = await response.json();
@@ -460,8 +470,8 @@
     });
     const titles = [...new Set(enriched.filter(candidate => !candidate.author).map(candidate => candidate.title).filter(Boolean))].slice(0, 3);
     for (const title of titles) {
-      const lookups = [searchOpenLibrary(title, { signal })];
-      if (localStorage.getItem(GOOGLE_BOOKS_KEY)?.trim()) lookups.push(searchGoogleBooks(title, { signal }));
+      const lookups = [searchOpenLibrary(title, { titleOnly: true, signal })];
+      if (localStorage.getItem(GOOGLE_BOOKS_KEY)?.trim()) lookups.push(searchGoogleBooks(googleTitleQuery(title), { signal }));
       const results = await Promise.allSettled(lookups);
       const matches = results.filter(result => result.status === 'fulfilled').flatMap(result => result.value);
       const match = matches.find(candidate => candidate.author && catalogTitlesMatch(title, candidate.title));
@@ -539,7 +549,7 @@
       const results = await Promise.allSettled(searches.map((search, index) => Promise.resolve().then(() => search.run()).then(group => {
         completedGroups[index] = group;
         if (isCurrent()) {
-          state.catalogResults = mergeCatalogCandidates(completedGroups.filter(Array.isArray));
+          state.catalogResults = mergeCatalogCandidates(completedGroups.filter(Array.isArray)).filter(candidate => catalogCandidateMatchesQuery(query, candidate));
           renderCatalogResults();
           if (state.catalogResults.length) {
             $('#catalogSearchMessage').textContent = `${state.catalogResults.length} találat eddig. Válassz a borító és a kiadási adatok alapján.`;
@@ -549,48 +559,44 @@
       })));
       if (!isCurrent()) return [];
       let successfulGroups = results.filter(result => result.status === 'fulfilled').map(result => result.value);
-      const googleUnavailable = results.some((result, index) => result.status === 'rejected' && searches[index].name.startsWith('Google Books'));
+      let googleFailure = results.find((result, index) => result.status === 'rejected' && searches[index].name.startsWith('Google Books'));
+      let googleUnavailable = Boolean(googleFailure);
       const googleKeyMissing = !localStorage.getItem(GOOGLE_BOOKS_KEY)?.trim();
       const molySearchLink = $('#molySearchLink');
       molySearchLink.href = `https://moly.hu/kereses?q=${encodeURIComponent(normalizedQuery || query)}`;
-      state.catalogResults = mergeCatalogCandidates(successfulGroups);
+      state.catalogResults = mergeCatalogCandidates(successfulGroups).filter(candidate => catalogCandidateMatchesQuery(query, candidate));
+      if (!exactIsbn && !state.catalogResults.length) {
+        $('#catalogSearchMessage').textContent = 'Pontosabb keresés a teljes címre…';
+        const titleSearches = [
+          { name: 'Google Books', run: () => searchGoogleBooks(googleTitleQuery(normalizedQuery), { signal }) },
+          { name: 'Open Library', run: () => searchOpenLibrary(normalizedQuery, { titleOnly: true, signal }) }
+        ];
+        const titleResults = await Promise.allSettled(titleSearches.map(search => Promise.resolve().then(() => search.run())));
+        if (!isCurrent()) return [];
+        googleFailure ||= titleResults.find((result, index) => result.status === 'rejected' && titleSearches[index].name.startsWith('Google Books'));
+        googleUnavailable = Boolean(googleFailure);
+        successfulGroups = successfulGroups.concat(titleResults.filter(result => result.status === 'fulfilled').map(result => result.value));
+        state.catalogResults = mergeCatalogCandidates(successfulGroups).filter(candidate => catalogCandidateMatchesQuery(query, candidate));
+      }
       if (!exactIsbn && state.catalogResults.some(candidate => !candidate.author)) {
         $('#catalogSearchMessage').textContent = 'A címet megtaláltam; szerzőadatot keresek a többi könyvkatalógusban…';
         state.catalogResults = await enrichCatalogAuthors(state.catalogResults, { signal });
         if (!isCurrent()) return [];
         renderCatalogResults();
       }
-      if (!exactIsbn && !state.catalogResults.length) {
-        const fallbackQueries = relaxedCatalogQueries(normalizedQuery);
-        for (const fallbackQuery of fallbackQueries) {
-          if (!isCurrent()) return [];
-          $('#catalogSearchMessage').textContent = 'Pontos találat nincs, próbálok lazább címkeresést…';
-          const foldedFallback = foldSearchText(normalizeHungarianBookQuery(fallbackQuery));
-          const fallbackSearches = [
-            () => searchGoogleBooks(fallbackQuery, { hungarianOnly: true, signal }),
-            () => searchMekBooks(fallbackQuery, { signal }),
-            () => searchOpenLibrary(fallbackQuery, { hungarianOnly: true, signal }),
-            () => searchGoogleBooks(foldedFallback, { signal }),
-            () => searchOpenLibrary(foldedFallback, { signal })
-          ];
-          const fallbackResults = await Promise.allSettled(fallbackSearches.map(run => Promise.resolve().then(run)));
-          if (!isCurrent()) return [];
-          successfulGroups = successfulGroups.concat(fallbackResults.filter(result => result.status === 'fulfilled').map(result => result.value));
-          state.catalogResults = mergeCatalogCandidates(successfulGroups);
-          renderCatalogResults();
-          if (state.catalogResults.length) break;
-        }
-      }
       if (!isCurrent()) return [];
       renderCatalogResults();
       molySearchLink.hidden = Boolean(state.catalogResults.length);
       if (state.catalogResults.length) {
-        $('#catalogSearchMessage').textContent = `${state.catalogResults.length} találat. Válassz a borító, a kiadás éve, a kiadó vagy az ISBN alapján.${googleKeyMissing ? ' A magyar Google Books-találatokhoz API-kulcs szükséges.' : googleUnavailable ? ' A Google Books most nem érhető el, ezért kevesebb találat jelenhet meg.' : ''}`;
-      } else if (!successfulGroups.length) {
-        $('#catalogSearchMessage').textContent = `Most nem sikerült elérni a könyvkatalógusokat.${googleKeyMissing ? ' A Google Books API-kulcs még nincs beállítva.' : googleUnavailable ? ' A Google Books jelenleg nem válaszol.' : ''} Ellenőrizd az internetet, vagy keress rá a Molyon.`;
+        const googleNotice = googleKeyMissing ? ' A Google Books-kulcs nincs beállítva ezen az eszközön.' : googleUnavailable ? ` Google Books-hiba: ${String(googleFailure?.reason?.message || 'nem érhető el').slice(0, 160)}.` : '';
+        $('#catalogSearchMessage').textContent = `${state.catalogResults.length} találat. Válassz a borító, a kiadás éve, a kiadó vagy az ISBN alapján.${googleNotice}`;
+      } else if (!successfulGroups.some(group => group.length)) {
+        const googleNotice = googleKeyMissing ? ' A Google Books-kulcs nincs beállítva ezen az eszközön.' : googleUnavailable ? ` Google Books-hiba: ${String(googleFailure?.reason?.message || 'nem érhető el').slice(0, 160)}.` : '';
+        $('#catalogSearchMessage').textContent = `Most nem találtam pontos könyvtári egyezést.${googleNotice} Keress rá a Molyon, vagy próbáld meg az ISBN-t.`;
         molySearchLink.hidden = false;
       } else {
-        $('#catalogSearchMessage').textContent = `Nem találtam egyezést.${googleKeyMissing ? ' A Google Books API-kulcs még nincs beállítva, az Open Library pedig nem tartalmazza ezt a magyar kiadást.' : googleUnavailable ? ' A Google Books most nem érhető el, az Open Library pedig nem tartalmazza ezt a magyar kiadást.' : ' Próbáld meg az eredeti címet, vagy add meg kézzel az adatokat.'}`;
+        const googleNotice = googleKeyMissing ? ' A Google Books-kulcs nincs beállítva ezen az eszközön.' : googleUnavailable ? ` Google Books-hiba: ${String(googleFailure?.reason?.message || 'nem érhető el').slice(0, 160)}.` : '';
+        $('#catalogSearchMessage').textContent = `Nem találtam pontos egyezést.${googleNotice} Próbáld meg az eredeti címet vagy az ISBN-t, vagy keress rá a Molyon.`;
         molySearchLink.hidden = false;
       }
       return state.catalogResults;
@@ -1229,7 +1235,7 @@
         render();
       }
     }
-    if ('serviceWorker' in navigator && location.protocol !== 'file:') navigator.serviceWorker.register('./sw.js?v=0.1.7', { updateViaCache: 'none' }).catch(() => {});
+    if ('serviceWorker' in navigator && location.protocol !== 'file:') navigator.serviceWorker.register('./sw.js?v=0.1.8', { updateViaCache: 'none' }).catch(() => {});
   }
 
   boot();
