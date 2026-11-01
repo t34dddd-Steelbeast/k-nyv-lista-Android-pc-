@@ -6,7 +6,7 @@
   const CONFIG_KEY = 'polc.supabase.config.v2';
   const GOOGLE_BOOKS_KEY = 'polc.google-books.api-key.v1';
   const DEFAULT_SUPABASE_CONFIG = {
-    url: 'https://liriticqwbpqtcpkbimjh.supabase.co',
+    url: 'https://lriticqwbpqtcpkbimjh.supabase.co',
     key: 'sb_publishable_IO9xI-sJ4L2kbMdsmGc1dA_BThy_e78'
   };
   const DEFAULT_LIST_NAME = 'El szeretném olvasni';
@@ -467,6 +467,50 @@
     }
   }
 
+  async function searchNektarBooks(query, { signal } = {}) {
+    const config = state.config || readConfig();
+    if (!config?.url || !config?.key) return [];
+    const controller = new AbortController();
+    const abortSearch = () => controller.abort();
+    if (signal?.aborted) controller.abort();
+    else signal?.addEventListener('abort', abortSearch, { once: true });
+    const timeout = setTimeout(() => controller.abort(), 14000);
+    try {
+      const client = await getClient();
+      const { data: sessionData, error: sessionError } = await client.auth.getSession();
+      if (sessionError) throw sessionError;
+      const accessToken = sessionData.session?.access_token;
+      if (!accessToken) return [];
+      const endpoint = `${config.url.replace(/\/+$/, '')}/functions/v1/oszk-nektar`;
+      const response = await fetch(endpoint, {
+        method: 'POST',
+        signal: controller.signal,
+        headers: {
+          'Content-Type': 'application/json',
+          apikey: config.key,
+          Authorization: `Bearer ${accessToken}`
+        },
+        body: JSON.stringify({ query })
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(data.error || `OSZK NEKTÁR: ${response.status}`);
+      return (Array.isArray(data.books) ? data.books : []).map(book => ({
+        source: 'OSZK NEKTÁR',
+        title: String(book.title || '').trim(),
+        author: String(book.author || '').trim(),
+        isbn: normalizeIsbn(book.isbn || ''),
+        publisher: String(book.publisher || '').trim(),
+        year: getYear(book.year),
+        pages: Number(book.pages) || '',
+        language: String(book.language || ''),
+        sourceId: String(book.sourceId || '')
+      })).filter(book => book.title);
+    } finally {
+      clearTimeout(timeout);
+      signal?.removeEventListener('abort', abortSearch);
+    }
+  }
+
   function catalogCandidatesMatch(left, right) {
     const leftIsbn = normalizeIsbn(left.isbn);
     const rightIsbn = normalizeIsbn(right.isbn);
@@ -573,11 +617,13 @@
     const accentFoldedQuery = exactIsbn ? normalizedQuery : foldSearchText(normalizedQuery);
     const signal = controller.signal;
     const searches = exactIsbn ? [
+      { name: 'OSZK NEKTÁR', run: () => searchNektarBooks(normalizedQuery, { signal }) },
       { name: 'Google Books magyar nyelvű', run: () => searchGoogleBooks(normalizedQuery, { hungarianOnly: true, signal }) },
       { name: 'Open Library magyar nyelvű', run: () => searchOpenLibrary(exactIsbn, { hungarianOnly: true, signal }) },
       { name: 'Google Books', run: () => searchGoogleBooks(accentFoldedQuery, { signal }) },
       { name: 'Open Library', run: () => searchOpenLibrary(exactIsbn, { signal }) }
     ] : [
+      { name: 'OSZK NEKTÁR', run: () => searchNektarBooks(normalizedQuery, { signal }) },
       { name: 'Google Books magyar nyelvű', run: () => searchGoogleBooks(normalizedQuery, { hungarianOnly: true, signal }) },
       { name: 'MEK (OSZK)', run: () => searchMekBooks(normalizedQuery, { signal }) },
       { name: 'Open Library magyar nyelvű', run: () => searchOpenLibrary(normalizedQuery, { hungarianOnly: true, signal }) },
@@ -601,6 +647,8 @@
       let successfulGroups = results.filter(result => result.status === 'fulfilled').map(result => result.value);
       let googleFailure = results.find((result, index) => result.status === 'rejected' && searches[index].name.startsWith('Google Books'));
       let googleUnavailable = Boolean(googleFailure);
+      const nektarFailure = results.find((result, index) => result.status === 'rejected' && searches[index].name === 'OSZK NEKTÁR');
+      const nektarNotice = nektarFailure ? ' Az OSZK NEKTÁR-kapcsolat jelenleg nem érhető el.' : '';
       const googleKeyMissing = !localStorage.getItem(GOOGLE_BOOKS_KEY)?.trim();
       const molySearchLink = $('#molySearchLink');
       molySearchLink.href = `https://moly.hu/kereses?q=${encodeURIComponent(normalizedQuery || query)}`;
@@ -629,14 +677,14 @@
       molySearchLink.hidden = Boolean(state.catalogResults.length);
       if (state.catalogResults.length) {
         const googleNotice = googleKeyMissing ? ' A Google Books-kulcs nincs beállítva ezen az eszközön.' : googleUnavailable ? ` Google Books-hiba: ${String(googleFailure?.reason?.message || 'nem érhető el').slice(0, 160)}.` : '';
-        $('#catalogSearchMessage').textContent = `${state.catalogResults.length} találat. Válassz a borító, a kiadás éve, a kiadó vagy az ISBN alapján.${googleNotice}`;
+        $('#catalogSearchMessage').textContent = `${state.catalogResults.length} találat. Válassz a borító, a kiadás éve, a kiadó vagy az ISBN alapján.${googleNotice}${nektarNotice}`;
       } else if (!successfulGroups.some(group => group.length)) {
         const googleNotice = googleKeyMissing ? ' A Google Books-kulcs nincs beállítva ezen az eszközön.' : googleUnavailable ? ` Google Books-hiba: ${String(googleFailure?.reason?.message || 'nem érhető el').slice(0, 160)}.` : '';
-        $('#catalogSearchMessage').textContent = `Most nem találtam pontos könyvtári egyezést.${googleNotice} Keress rá a Molyon, vagy próbáld meg az ISBN-t.`;
+        $('#catalogSearchMessage').textContent = `Most nem találtam pontos könyvtári egyezést.${googleNotice}${nektarNotice} Keress rá a Molyon, vagy próbáld meg az ISBN-t.`;
         molySearchLink.hidden = false;
       } else {
         const googleNotice = googleKeyMissing ? ' A Google Books-kulcs nincs beállítva ezen az eszközön.' : googleUnavailable ? ` Google Books-hiba: ${String(googleFailure?.reason?.message || 'nem érhető el').slice(0, 160)}.` : '';
-        $('#catalogSearchMessage').textContent = `Nem találtam pontos egyezést.${googleNotice} Próbáld meg az eredeti címet vagy az ISBN-t, vagy keress rá a Molyon.`;
+        $('#catalogSearchMessage').textContent = `Nem találtam pontos egyezést.${googleNotice}${nektarNotice} Próbáld meg az eredeti címet vagy az ISBN-t, vagy keress rá a Molyon.`;
         molySearchLink.hidden = false;
       }
       return state.catalogResults;
@@ -1275,7 +1323,7 @@
         render();
       }
     }
-    if ('serviceWorker' in navigator && location.protocol !== 'file:') navigator.serviceWorker.register('./sw.js?v=0.1.9', { updateViaCache: 'none' }).catch(() => {});
+    if ('serviceWorker' in navigator && location.protocol !== 'file:') navigator.serviceWorker.register('./sw.js?v=0.1.10', { updateViaCache: 'none' }).catch(() => {});
   }
 
   boot();
