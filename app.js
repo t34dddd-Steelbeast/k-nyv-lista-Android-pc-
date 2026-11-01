@@ -12,7 +12,7 @@
   const DEFAULT_LIST_NAME = 'El szeretném olvasni';
   const LABELS = { book: 'Könyv', ebook: 'E-könyv', audio: 'Hangoskönyv' };
   const STATUS_LABELS = ['Olvasatlan', 'Olvasom', 'Elolvastam', 'Félbehagytam'];
-  const state = { books: [], lists: [], status: 'all', listFilter: 'all', format: 'all', query: '', mode: 'local', user: null, client: null, config: null, installPrompt: null, toastTimer: null, scannerStream: null, scannerActive: false, scannerBusy: false, catalogResults: [] };
+  const state = { books: [], lists: [], status: 'all', listFilter: 'all', format: 'all', query: '', mode: 'local', user: null, client: null, config: null, installPrompt: null, toastTimer: null, scannerStream: null, scannerActive: false, scannerBusy: false, scannerSearchMode: false, catalogResults: [], catalogSearchTimer: null, catalogSearchSequence: 0, catalogSearchController: null };
 
   const $ = (selector, root = document) => root.querySelector(selector);
   const $$ = (selector, root = document) => [...root.querySelectorAll(selector)];
@@ -156,6 +156,9 @@
   }
 
   function openBook(book = null) {
+    clearTimeout(state.catalogSearchTimer);
+    state.catalogSearchController?.abort();
+    state.catalogSearchSequence += 1;
     $('#bookForm').reset();
     $('#catalogSearchPanel').hidden = Boolean(book);
     $('#manualEntryDivider').hidden = Boolean(book);
@@ -178,7 +181,7 @@
     $('#bookNotes').value = book?.notes || '';
     $('#bookDialogTitle').textContent = book ? 'Könyv szerkesztése' : 'Új könyv';
     $('#bookDialog').showModal();
-    setTimeout(() => $('#bookTitle').focus(), 0);
+    setTimeout(() => (book ? $('#bookTitle') : $('#catalogQuery')).focus({ preventScroll: true }), 0);
   }
 
   function renderListsEditor() {
@@ -323,25 +326,27 @@
     };
   }
 
-  async function searchGoogleBooks(query, { hungarianOnly = false } = {}) {
+  async function searchGoogleBooks(query, { hungarianOnly = false, signal } = {}) {
     const params = new URLSearchParams({ q: query, maxResults: '20', printType: 'books' });
     if (hungarianOnly) params.set('langRestrict', 'hu');
     const apiKey = localStorage.getItem(GOOGLE_BOOKS_KEY)?.trim();
     if (!apiKey) throw new Error('Google Books API-kulcs nincs beállítva');
     params.set('key', apiKey);
-    const response = await fetch(`https://www.googleapis.com/books/v1/volumes?${params}`);
+    const response = await fetch(`https://www.googleapis.com/books/v1/volumes?${params}`, { signal });
     if (!response.ok) throw new Error(`Google Books: ${response.status}`);
     const data = await response.json();
     return (data.items || []).map(item => googleCandidate(item, hungarianOnly ? 'Google Books · magyar nyelv' : 'Google Books')).filter(candidate => candidate.title);
   }
 
-  async function searchOpenLibrary(query, { hungarianOnly = false } = {}) {
+  async function searchOpenLibrary(query, { hungarianOnly = false, signal } = {}) {
     const params = new URLSearchParams({
       lang: 'hu', limit: '20',
       fields: 'key,title,author_name,first_publish_year,cover_i,editions,editions.key,editions.title,editions.language'
     });
-    params.set('q', hungarianOnly ? `${query} language:hun` : query);
-    const response = await fetch(`https://openlibrary.org/search.json?${params}`);
+    const isbn = normalizeIsbn(query);
+    const searchQuery = isValidIsbn(isbn) ? `isbn:${isbn}` : query;
+    params.set('q', hungarianOnly ? `${searchQuery} language:hun` : searchQuery);
+    const response = await fetch(`https://openlibrary.org/search.json?${params}`, { signal });
     if (!response.ok) throw new Error(`Open Library: ${response.status}`);
     const data = await response.json();
     return (data.docs || []).flatMap(work => {
@@ -366,13 +371,16 @@
     return String(value || '').replace(/\\/g, '\\\\').replace(/"/g, '\\"').replace(/[\r\n]/g, ' ');
   }
 
-  async function searchMekBooks(query) {
+  async function searchMekBooks(query, { signal } = {}) {
     const words = [...new Set(query.split(/\s+/).map(word => word.trim()).filter(Boolean))].slice(0, 8);
     if (!words.length) return [];
     const matchingTerms = words.map(word => `CONTAINS(LCASE(?searchText), LCASE("${escapeSparqlLiteral(word)}"))`).join(' && ');
     const sparql = `PREFIX dcterms: <http://purl.org/dc/terms/>\nPREFIX bibo: <http://purl.org/ontology/bibo/>\nPREFIX foaf: <http://xmlns.com/foaf/0.1/>\nPREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>\nSELECT DISTINCT ?record ?title ?author ?publisher ?published ?isbn ?language WHERE {\n  ?record dcterms:title ?title .\n  OPTIONAL { ?record dcterms:creator ?creator }\n  OPTIONAL { ?creator foaf:name ?creatorName }\n  OPTIONAL { ?creator rdfs:label ?creatorLabel }\n  BIND(COALESCE(STR(?creatorName), STR(?creatorLabel), IF(isLiteral(?creator), STR(?creator), "")) AS ?author)\n  OPTIONAL { ?record dcterms:publisher ?publisher }\n  OPTIONAL { ?record dcterms:issued ?issued }\n  OPTIONAL { ?record dcterms:date ?date }\n  BIND(COALESCE(STR(?issued), STR(?date), "") AS ?published)\n  OPTIONAL { ?record bibo:isbn ?isbn }\n  OPTIONAL { ?record dcterms:language ?language }\n  BIND(LCASE(CONCAT(STR(?title), " ", COALESCE(?author, ""), " ", COALESCE(STR(?creator), ""))) AS ?searchText)\n  FILTER(${matchingTerms})\n} LIMIT 20`;
     const params = new URLSearchParams({ query: sparql, format: 'application/sparql-results+json' });
     const controller = new AbortController();
+    const abortSearch = () => controller.abort();
+    if (signal?.aborted) controller.abort();
+    else signal?.addEventListener('abort', abortSearch, { once: true });
     const timeout = setTimeout(() => controller.abort(), 9000);
     try {
       const response = await fetch(`https://v.mek.oszk.hu/sparql?${params}`, { signal: controller.signal, headers: { Accept: 'application/sparql-results+json' } });
@@ -391,6 +399,7 @@
       }).filter(candidate => candidate.title);
     } finally {
       clearTimeout(timeout);
+      signal?.removeEventListener('abort', abortSearch);
     }
   }
 
@@ -423,51 +432,118 @@
   function renderCatalogResults() {
     $('#catalogResults').innerHTML = state.catalogResults.map((candidate, index) => {
       const details = [candidate.language, candidate.publisher, candidate.year, candidate.isbn ? `ISBN ${candidate.isbn}` : ''].filter(Boolean).join(' · ');
-      return `<div class="catalog-result-wrap"><button class="catalog-result" type="button" data-catalog-index="${index}"><span class="catalog-result-copy"><strong>${esc(candidate.title)}</strong><span>${esc(candidate.author || 'A szerző nem szerepel az adatbázisban')}</span><small>${esc(details || 'A kiadás további adatai kiválasztás után kérhetők le')}</small></span><span class="catalog-result-source">${esc(candidate.source)}</span></button>${candidate.sourceUrl ? `<a class="catalog-source-link" href="${esc(candidate.sourceUrl)}" target="_blank" rel="noopener noreferrer">MEK-rekord ↗</a>` : ''}</div>`;
+      const coverUrl = safeCoverUrl(candidate.coverUrl);
+      const initials = (candidate.title || '?').trim().split(/\s+/).slice(0, 2).map(part => part[0]).join('').toLocaleUpperCase('hu');
+      return `<div class="catalog-result-wrap"><button class="catalog-result" type="button" data-catalog-index="${index}"><span class="catalog-result-cover" aria-hidden="true"><span class="catalog-result-cover-placeholder">${esc(initials || 'K')}</span>${coverUrl ? `<img src="${esc(coverUrl)}" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.remove()" />` : ''}</span><span class="catalog-result-copy"><strong>${esc(candidate.title)}</strong><span>${esc(candidate.author || 'A szerző nem szerepel az adatbázisban')}</span><small>${esc(details || 'A kiadás további adatai kiválasztás után kérhetők le')}</small><em class="catalog-result-source">${esc(candidate.source)}</em></span></button>${candidate.sourceUrl ? `<a class="catalog-source-link" href="${esc(candidate.sourceUrl)}" target="_blank" rel="noopener noreferrer">MEK-rekord ↗</a>` : ''}</div>`;
     }).join('');
   }
 
-  async function searchCatalogBooks() {
-    const query = $('#catalogQuery').value.trim();
+  async function searchCatalogBooks(queryValue = $('#catalogQuery').value, { requestId = null } = {}) {
+    const query = String(queryValue || '').trim();
     if (!query) {
       $('#catalogSearchMessage').textContent = 'Írd be a könyv címét, a szerzőt vagy mindkettőt.';
       $('#catalogQuery').focus();
-      return;
+      return [];
     }
+    const queryIsbn = normalizeIsbn(query);
+    const exactIsbn = isValidIsbn(queryIsbn) ? queryIsbn : '';
+    if (query.length < 2 && !exactIsbn) {
+      $('#catalogSearchMessage').textContent = 'Írj be legalább 2 karaktert vagy egy teljes ISBN-t.';
+      return [];
+    }
+    clearTimeout(state.catalogSearchTimer);
+    state.catalogSearchTimer = null;
+    const currentRequestId = requestId ?? state.catalogSearchSequence + 1;
+    state.catalogSearchSequence = currentRequestId;
+    state.catalogSearchController?.abort();
+    const controller = new AbortController();
+    state.catalogSearchController = controller;
+    const isCurrent = () => currentRequestId === state.catalogSearchSequence && $('#catalogQuery').value.trim() === query;
     const button = $('#searchCatalogButton');
     button.disabled = true;
     button.textContent = 'Keresés…';
     $('#catalogSearchMessage').textContent = 'Keresés a könyvkatalógusokban…';
     $('#catalogResults').innerHTML = '';
+    $('#molySearchLink').hidden = true;
     state.catalogResults = [];
-    const normalizedQuery = normalizeHungarianBookQuery(query);
-    const accentFoldedQuery = foldSearchText(normalizedQuery);
-    const searches = [
-      { name: 'Google Books magyar nyelvű', run: () => searchGoogleBooks(normalizedQuery, { hungarianOnly: true }) },
-      { name: 'MEK (OSZK)', run: () => searchMekBooks(normalizedQuery) },
-      { name: 'Open Library magyar nyelvű', run: () => searchOpenLibrary(normalizedQuery, { hungarianOnly: true }) },
-      { name: 'Google Books', run: () => searchGoogleBooks(accentFoldedQuery) },
-      { name: 'Open Library', run: () => searchOpenLibrary(accentFoldedQuery) }
+    const normalizedQuery = exactIsbn ? `isbn:${exactIsbn}` : normalizeHungarianBookQuery(query);
+    const accentFoldedQuery = exactIsbn ? normalizedQuery : foldSearchText(normalizedQuery);
+    const signal = controller.signal;
+    const searches = exactIsbn ? [
+      { name: 'Google Books magyar nyelvű', run: () => searchGoogleBooks(normalizedQuery, { hungarianOnly: true, signal }) },
+      { name: 'Open Library magyar nyelvű', run: () => searchOpenLibrary(exactIsbn, { hungarianOnly: true, signal }) },
+      { name: 'Google Books', run: () => searchGoogleBooks(accentFoldedQuery, { signal }) },
+      { name: 'Open Library', run: () => searchOpenLibrary(exactIsbn, { signal }) }
+    ] : [
+      { name: 'Google Books magyar nyelvű', run: () => searchGoogleBooks(normalizedQuery, { hungarianOnly: true, signal }) },
+      { name: 'MEK (OSZK)', run: () => searchMekBooks(normalizedQuery, { signal }) },
+      { name: 'Open Library magyar nyelvű', run: () => searchOpenLibrary(normalizedQuery, { hungarianOnly: true, signal }) },
+      { name: 'Google Books', run: () => searchGoogleBooks(accentFoldedQuery, { signal }) },
+      { name: 'Open Library', run: () => searchOpenLibrary(accentFoldedQuery, { signal }) }
     ];
-    const results = await Promise.allSettled(searches.map(search => search.run()));
-    const successfulGroups = results.filter(result => result.status === 'fulfilled').map(result => result.value);
-    const unavailableSources = results.flatMap((result, index) => result.status === 'rejected' ? [searches[index].name] : []);
-    const googleUnavailable = results.some((result, index) => result.status === 'rejected' && searches[index].name.startsWith('Google Books'));
-    const googleKeyMissing = !localStorage.getItem(GOOGLE_BOOKS_KEY)?.trim();
-    const molySearchLink = $('#molySearchLink');
-    molySearchLink.href = `https://moly.hu/kereses?q=${encodeURIComponent(normalizedQuery || query)}`;
-    molySearchLink.hidden = false;
-    state.catalogResults = mergeCatalogCandidates(successfulGroups);
-    renderCatalogResults();
-    if (state.catalogResults.length) {
-      $('#catalogSearchMessage').textContent = `${state.catalogResults.length} találat. Válaszd ki a megfelelő nyelvet, kiadást vagy ISBN-t.${googleKeyMissing ? ' A Google Books magyar találataihoz állíts be API-kulcsot a Beállításokban.' : googleUnavailable ? ' A Google Books most nem érhető el, ezért magyar címekből kevesebb találat jelenhet meg.' : ''}`;
-    } else if (!successfulGroups.length) {
-      $('#catalogSearchMessage').textContent = `Most nem sikerült elérni a könyvkatalógusokat.${googleKeyMissing ? ' A Google Books API-kulcs még nincs beállítva.' : googleUnavailable ? ' A Google Books jelenleg nem válaszol.' : ''} Ellenőrizd az internetet, vagy keresd meg a magyar kiadást a Molyon az alábbi hivatkozással.`;
-    } else {
-      $('#catalogSearchMessage').textContent = `Nem találtam egyezést.${googleKeyMissing ? ' A Google Books API-kulcs még nincs beállítva, az Open Library pedig nem tartalmazza ezt a magyar kiadást.' : googleUnavailable ? ' A Google Books most nem érhető el, az Open Library pedig nem tartalmazza ezt a magyar kiadást.' : ' Próbáld meg az eredeti címet, vagy add meg kézzel az adatokat.'}`;
+    try {
+      const completedGroups = [];
+      const results = await Promise.allSettled(searches.map((search, index) => Promise.resolve().then(() => search.run()).then(group => {
+        completedGroups[index] = group;
+        if (isCurrent()) {
+          state.catalogResults = mergeCatalogCandidates(completedGroups.filter(Array.isArray));
+          renderCatalogResults();
+          if (state.catalogResults.length) {
+            $('#catalogSearchMessage').textContent = `${state.catalogResults.length} találat eddig. Válassz a borító és a kiadási adatok alapján.`;
+          }
+        }
+        return group;
+      })));
+      if (!isCurrent()) return [];
+      const successfulGroups = results.filter(result => result.status === 'fulfilled').map(result => result.value);
+      const googleUnavailable = results.some((result, index) => result.status === 'rejected' && searches[index].name.startsWith('Google Books'));
+      const googleKeyMissing = !localStorage.getItem(GOOGLE_BOOKS_KEY)?.trim();
+      const molySearchLink = $('#molySearchLink');
+      molySearchLink.href = `https://moly.hu/kereses?q=${encodeURIComponent(normalizedQuery || query)}`;
+      state.catalogResults = mergeCatalogCandidates(successfulGroups);
+      renderCatalogResults();
+      molySearchLink.hidden = Boolean(state.catalogResults.length);
+      if (state.catalogResults.length) {
+        $('#catalogSearchMessage').textContent = `${state.catalogResults.length} találat. Válassz a borító, a kiadás éve, a kiadó vagy az ISBN alapján.${googleKeyMissing ? ' A magyar Google Books-találatokhoz API-kulcs szükséges.' : googleUnavailable ? ' A Google Books most nem érhető el, ezért kevesebb találat jelenhet meg.' : ''}`;
+      } else if (!successfulGroups.length) {
+        $('#catalogSearchMessage').textContent = `Most nem sikerült elérni a könyvkatalógusokat.${googleKeyMissing ? ' A Google Books API-kulcs még nincs beállítva.' : googleUnavailable ? ' A Google Books jelenleg nem válaszol.' : ''} Ellenőrizd az internetet, vagy keress rá a Molyon.`;
+        molySearchLink.hidden = false;
+      } else {
+        $('#catalogSearchMessage').textContent = `Nem találtam egyezést.${googleKeyMissing ? ' A Google Books API-kulcs még nincs beállítva, az Open Library pedig nem tartalmazza ezt a magyar kiadást.' : googleUnavailable ? ' A Google Books most nem érhető el, az Open Library pedig nem tartalmazza ezt a magyar kiadást.' : ' Próbáld meg az eredeti címet, vagy add meg kézzel az adatokat.'}`;
+        molySearchLink.hidden = false;
+      }
+      return state.catalogResults;
+    } finally {
+      if (isCurrent()) {
+        button.disabled = false;
+        button.textContent = 'Keresés';
+        if (state.catalogSearchController === controller) state.catalogSearchController = null;
+      }
     }
+  }
+
+  function scheduleCatalogSearch() {
+    clearTimeout(state.catalogSearchTimer);
+    state.catalogSearchController?.abort();
+    state.catalogSearchController = null;
+    const requestId = ++state.catalogSearchSequence;
+    const query = $('#catalogQuery').value.trim();
+    const button = $('#searchCatalogButton');
     button.disabled = false;
-    button.textContent = 'Könyvek keresése';
+    button.textContent = 'Keresés';
+    $('#catalogResults').innerHTML = '';
+    $('#molySearchLink').hidden = true;
+    state.catalogResults = [];
+    if (!query) {
+      $('#catalogSearchMessage').textContent = '';
+      return;
+    }
+    if (query.length < 2 && !isValidIsbn(normalizeIsbn(query))) {
+      $('#catalogSearchMessage').textContent = 'Írj be még legalább egy karaktert.';
+      return;
+    }
+    $('#catalogSearchMessage').textContent = 'Találatok keresése…';
+    state.catalogSearchTimer = setTimeout(() => searchCatalogBooks(query, { requestId }), 450);
   }
 
   async function openLibraryEditionMetadata(candidate) {
@@ -608,7 +684,8 @@
     if ($('#scannerDialog').open) $('#scannerDialog').close();
   }
 
-  async function startScanner() {
+  async function startScanner(searchFromCatalog = false) {
+    state.scannerSearchMode = Boolean(searchFromCatalog);
     if (!window.isSecureContext || !navigator.mediaDevices?.getUserMedia) {
       toast('A kamerás beolvasáshoz HTTPS-kapcsolat és kameraengedély szükséges.');
       return;
@@ -638,11 +715,23 @@
             const codes = await detector.detect(video);
             const isbn = normalizeIsbn(codes.find(code => code.format === 'ean_13')?.rawValue || '');
             if (isbn.startsWith('978') || isbn.startsWith('979')) {
+              const searchCatalog = state.scannerSearchMode;
               stopScanner();
               if ($('#scannerDialog').open) $('#scannerDialog').close();
               $('#bookIsbn').value = isbn;
-              $('#metadataMessage').textContent = 'ISBN beolvasva. Könyvadatok keresése…';
-              await lookupBookMetadata();
+              if (searchCatalog) {
+                $('#catalogQuery').value = isbn;
+                $('#metadataMessage').textContent = '';
+                $('#catalogSearchMessage').textContent = 'ISBN beolvasva. Kiadások keresése…';
+                const candidates = await searchCatalogBooks(isbn);
+                if (!candidates.length) {
+                  $('#metadataMessage').textContent = 'Nem találtam kiadást az ISBN alapján, megpróbálom betölteni az adatokat.';
+                  await lookupBookMetadata();
+                }
+              } else {
+                $('#metadataMessage').textContent = 'ISBN beolvasva. Könyvadatok keresése…';
+                await lookupBookMetadata();
+              }
               return;
             }
           } catch (error) { console.warn('A vonalkód beolvasása nem sikerült.', error); }
@@ -940,13 +1029,15 @@
     });
     $('#bookForm').addEventListener('submit', saveBookFromForm);
     $('#lookupIsbnButton').addEventListener('click', lookupBookMetadata);
-    $('#searchCatalogButton').addEventListener('click', searchCatalogBooks);
+    $('#searchCatalogButton').addEventListener('click', () => searchCatalogBooks());
+    $('#scanCatalogIsbnButton').addEventListener('click', () => startScanner(true));
+    $('#catalogQuery').addEventListener('input', scheduleCatalogSearch);
     $('#catalogQuery').addEventListener('keydown', event => { if (event.key === 'Enter') { event.preventDefault(); searchCatalogBooks(); } });
     $('#catalogResults').addEventListener('click', event => {
       const result = event.target.closest('[data-catalog-index]');
       if (result) selectCatalogBook(Number(result.dataset.catalogIndex));
     });
-    $('#scanIsbnButton').addEventListener('click', startScanner);
+    $('#scanIsbnButton').addEventListener('click', () => startScanner());
     $('#manageListsButton').addEventListener('click', openListsDialog);
     $('#newListForm').addEventListener('submit', createCustomList);
     $('#listsEditor').addEventListener('click', event => {
