@@ -17,7 +17,7 @@
         <span class="brand-mark" aria-hidden="true">
           <svg viewBox="0 0 32 32" fill="none"><path d="M5.5 7.5c4.3-.8 7.8.2 10.5 2.5v15c-2.7-2.3-6.2-3.3-10.5-2.5v-15Z"/><path d="M26.5 7.5c-4.3-.8-7.8.2-10.5 2.5v15c2.7-2.3 6.2-3.3 10.5-2.5v-15Z"/><path d="M16 10v15"/></svg>
         </span>
-        <span class="brand-copy"><strong>polc<span class="app-version" aria-label="Alkalmazásverzió 0.1.3" title="Alkalmazásverzió">v0.1.3</span></strong><small>a saját könyvtárad</small></span>
+        <span class="brand-copy"><strong>polc<span class="app-version" aria-label="Alkalmazásverzió 0.1.4" title="Alkalmazásverzió">v0.1.4</span></strong><small>a saját könyvtárad</small></span>
       </a>
       <div class="top-actions">
         <span class="connection-badge local" id="connectionBadge"><i></i><span id="connectionText">Helyi tárhely</span></span>
@@ -93,10 +93,10 @@
         </div>
         <input type="hidden" id="bookId" />
         <section class="catalog-search-panel" id="catalogSearchPanel" aria-label="Könyv keresése az adatbázisokban">
-          <p class="catalog-search-intro">Írd be egy mezőbe a címet, a szerzőt vagy mindkettőt, és válaszd ki a megfelelő könyvet vagy kiadást.</p>
+          <p class="catalog-search-intro">Kezdj el gépelni: a találatok borítóval és kiadási adatokkal jelennek meg. ISBN-t is beírhatsz vagy beolvashatsz.</p>
           <div class="catalog-search-fields">
-            <label class="field"><span>Keresés a könyvadatbázisokban</span><input id="catalogQuery" type="search" maxlength="240" placeholder="Például: Ragyogás Stephen King" autocomplete="off" /></label>
-            <button class="button button-primary" id="searchCatalogButton" type="button">Könyvek keresése</button>
+            <label class="field"><span>Keresés a könyvadatbázisokban</span><input id="catalogQuery" type="search" maxlength="240" placeholder="Cím, szerző vagy ISBN" autocomplete="off" aria-controls="catalogResults" /></label>
+            <div class="catalog-search-actions"><button class="button button-primary" id="searchCatalogButton" type="button">Keresés</button><button class="button button-quiet" id="scanCatalogIsbnButton" type="button">ISBN beolvasása</button></div>
           </div>
           <p class="metadata-note">Magyar nyelvű találatokat keresek a Google Booksban és az Open Libraryben, valamint az OSZK Magyar Elektronikus Könyvtárában. A Google Books használatához API-kulcs kell, amelyet a Beállításokban adhatsz meg. A kiadót és az ISBN-t ellenőrizd a választásnál.</p>
           <p class="catalog-search-message" id="catalogSearchMessage" role="status" aria-live="polite"></p>
