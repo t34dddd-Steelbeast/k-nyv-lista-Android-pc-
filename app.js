@@ -298,9 +298,21 @@
     const stopWords = new Set(['a', 'az', 'the', 'of', 'and', 'or', 'de', 'der', 'die', 'das', 'és']);
     const terms = foldSearchText(query).replace(/[^\p{L}\p{N}]+/gu, ' ').split(' ').filter(term => term.length > 1 && !stopWords.has(term));
     if (!terms.length) return true;
-    const text = foldSearchText(`${candidate.title || ''} ${candidate.author || ''}`).replace(/[^\p{L}\p{N}]+/gu, ' ');
-    const candidateTerms = new Set(text.split(' '));
-    return terms.every(term => candidateTerms.has(term));
+    const tokenize = value => foldSearchText(value).replace(/[^\p{L}\p{N}]+/gu, ' ').split(' ').filter(Boolean);
+    const titleTerms = new Set(tokenize(candidate.title));
+    const authorTerms = new Set(tokenize(candidate.author));
+    const candidateTerms = new Set([...titleTerms, ...authorTerms]);
+    if (terms.every(term => candidateTerms.has(term))) return true;
+
+    // Open Library often has the Hungarian title and author on different or
+    // incomplete records. Keep a strong title match even when the author is
+    // missing or indexed under a different spelling; the API already ranked
+    // the candidates for this query.
+    if (String(candidate.source || '').startsWith('Open Library')) {
+      const titleMatches = terms.filter(term => titleTerms.has(term)).length;
+      return titleMatches >= Math.min(2, terms.length);
+    }
+    return false;
   }
   function normalizeHungarianBookQuery(value) {
     return String(value || '').replace(/\S+/gu, word => word.replace(/(ás|és)t$/iu, '$1')).replace(/\s+/g, ' ').trim();
@@ -1323,7 +1335,7 @@
         render();
       }
     }
-    if ('serviceWorker' in navigator && location.protocol !== 'file:') navigator.serviceWorker.register('./sw.js?v=0.1.10', { updateViaCache: 'none' }).catch(() => {});
+    if ('serviceWorker' in navigator && location.protocol !== 'file:') navigator.serviceWorker.register('./sw.js?v=0.1.11', { updateViaCache: 'none' }).catch(() => {});
   }
 
   boot();
