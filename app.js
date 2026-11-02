@@ -289,6 +289,32 @@
   function foldSearchText(value) {
     return String(value || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLocaleLowerCase('hu').replace(/\s+/g, ' ').trim();
   }
+  function catalogEditDistanceAtMostOne(left, right) {
+    if (Math.abs(left.length - right.length) > 1) return false;
+    let leftIndex = 0;
+    let rightIndex = 0;
+    let edits = 0;
+    while (leftIndex < left.length && rightIndex < right.length) {
+      if (left[leftIndex] === right[rightIndex]) {
+        leftIndex += 1;
+        rightIndex += 1;
+        continue;
+      }
+      edits += 1;
+      if (edits > 1) return false;
+      if (left.length > right.length) leftIndex += 1;
+      else if (right.length > left.length) rightIndex += 1;
+      else {
+        leftIndex += 1;
+        rightIndex += 1;
+      }
+    }
+    return edits + (leftIndex < left.length || rightIndex < right.length ? 1 : 0) <= 1;
+  }
+  function catalogFallbackTerms(value) {
+    const stopWords = new Set(['a', 'az', 'the', 'of', 'and', 'or', 'de', 'der', 'die', 'das', 'es']);
+    return [...new Set(foldSearchText(value).replace(/[^\p{L}\p{N}]+/gu, ' ').split(' ').filter(term => term.length >= 3 && !stopWords.has(term)))].sort((left, right) => right.length - left.length).slice(0, 2);
+  }
   function googleTitleQuery(value) {
     return `intitle:"${String(value || '').replace(/["\\]/g, ' ').replace(/\s+/g, ' ').trim()}"`;
   }
@@ -302,14 +328,17 @@
     const titleTerms = new Set(tokenize(candidate.title));
     const authorTerms = new Set(tokenize(candidate.author));
     const candidateTerms = new Set([...titleTerms, ...authorTerms]);
-    if (terms.every(term => candidateTerms.has(term))) return true;
+    const termMatches = (term, words) => [...words].some(word => word === term
+      || (term.length >= 3 && word.startsWith(term))
+      || (term.length >= 3 && word.length >= 3 && catalogEditDistanceAtMostOne(term, word)));
+    if (terms.every(term => termMatches(term, candidateTerms))) return true;
 
     // Open Library often has the Hungarian title and author on different or
     // incomplete records. Keep a strong title match even when the author is
     // missing or indexed under a different spelling; the API already ranked
     // the candidates for this query.
     if (String(candidate.source || '').startsWith('Open Library')) {
-      const titleMatches = terms.filter(term => titleTerms.has(term)).length;
+      const titleMatches = terms.filter(term => termMatches(term, titleTerms)).length;
       return titleMatches >= Math.min(2, terms.length);
     }
     return false;
@@ -658,7 +687,9 @@
       if (!isCurrent()) return [];
       let successfulGroups = results.filter(result => result.status === 'fulfilled').map(result => result.value);
       let googleFailure = results.find((result, index) => result.status === 'rejected' && searches[index].name.startsWith('Google Books'));
-      let googleUnavailable = Boolean(googleFailure);
+      let googleAttempts = results.filter((result, index) => searches[index].name.startsWith('Google Books')).length;
+      let googleSuccesses = results.filter((result, index) => result.status === 'fulfilled' && searches[index].name.startsWith('Google Books')).length;
+      let googleUnavailable = googleAttempts > 0 && googleSuccesses === 0 && Boolean(googleFailure);
       const nektarFailure = results.find((result, index) => result.status === 'rejected' && searches[index].name === 'OSZK NEKTÁR');
       const nektarNotice = nektarFailure ? ' Az OSZK NEKTÁR-kapcsolat jelenleg nem érhető el.' : '';
       const googleKeyMissing = !localStorage.getItem(GOOGLE_BOOKS_KEY)?.trim();
@@ -671,10 +702,18 @@
           { name: 'Google Books', run: () => searchGoogleBooks(googleTitleQuery(normalizedQuery), { signal }) },
           { name: 'Open Library', run: () => searchOpenLibrary(normalizedQuery, { titleOnly: true, signal }) }
         ];
+        for (const term of catalogFallbackTerms(query)) {
+          titleSearches.push(
+            { name: 'Google Books', run: () => searchGoogleBooks(googleTitleQuery(term), { signal }) },
+            { name: 'Open Library', run: () => searchOpenLibrary(term, { titleOnly: true, signal }) }
+          );
+        }
         const titleResults = await Promise.allSettled(titleSearches.map(search => Promise.resolve().then(() => search.run())));
         if (!isCurrent()) return [];
         googleFailure ||= titleResults.find((result, index) => result.status === 'rejected' && titleSearches[index].name.startsWith('Google Books'));
-        googleUnavailable = Boolean(googleFailure);
+        googleAttempts += titleResults.filter((result, index) => titleSearches[index].name.startsWith('Google Books')).length;
+        googleSuccesses += titleResults.filter((result, index) => result.status === 'fulfilled' && titleSearches[index].name.startsWith('Google Books')).length;
+        googleUnavailable = googleAttempts > 0 && googleSuccesses === 0 && Boolean(googleFailure);
         successfulGroups = successfulGroups.concat(titleResults.filter(result => result.status === 'fulfilled').map(result => result.value));
         state.catalogResults = mergeCatalogCandidates(successfulGroups).filter(candidate => catalogCandidateMatchesQuery(query, candidate));
       }
@@ -1335,7 +1374,7 @@
         render();
       }
     }
-    if ('serviceWorker' in navigator && location.protocol !== 'file:') navigator.serviceWorker.register('./sw.js?v=0.1.11', { updateViaCache: 'none' }).catch(() => {});
+    if ('serviceWorker' in navigator && location.protocol !== 'file:') navigator.serviceWorker.register('./sw.js?v=0.1.12', { updateViaCache: 'none' }).catch(() => {});
   }
 
   boot();
